@@ -698,7 +698,7 @@ const Chat = () => {
   }, [AUTH_ENABLED])
 
   useLayoutEffect(() => {
-    chatMessageStreamEnd.current?.scrollIntoView({ behavior: 'smooth' })
+    chatMessageStreamEnd.current?.scrollTo({ top: chatMessageStreamEnd.current.scrollHeight, behavior: 'smooth' })
   }, [showLoadingMessage, processMessages])
 
   const onShowCitation = (citation: Citation) => {
@@ -796,7 +796,7 @@ const Chat = () => {
                 <h2 className={styles.chatEmptyStateSubtitle}>{ui?.chat_description}</h2>
               </Stack>
             ) : (
-              <div className={styles.chatMessageStream} style={{ marginBottom: isLoading ? '40px' : '0px' }} role="log">
+              <div className={styles.chatMessageStream} style={{ marginBottom: isLoading ? '40px' : '0px' }} role="log" ref={chatMessageStreamEnd} >
                 {messages.map((answer, index) => (
                   <>
                     {answer.role === 'user' ? (
@@ -846,7 +846,7 @@ const Chat = () => {
                     </div>
                   </>
                 )}
-                <div ref={chatMessageStreamEnd} />
+                <div/>
               </div>
             )}
 
