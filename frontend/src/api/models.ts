@@ -125,8 +125,6 @@ export type ErrorMessage = {
 
 export type UI = {
   title: string
-  titlelink: string
-  titlelinkurl: string
   chat_title: string
   chat_description: string
   logo?: string
@@ -134,6 +132,10 @@ export type UI = {
   show_share_button?: boolean
   show_chat_history_button?: boolean
   chat_response_contactmessage?: string
+  poweredby: string
+  poweredbycomp: string
+  poweredbyurl: string
+  headertitle: string
 }
 
 export type FrontendSettings = {

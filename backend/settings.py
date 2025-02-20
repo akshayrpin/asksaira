@@ -50,6 +50,10 @@ class _UiSettings(BaseSettings):
     show_share_button: bool = True
     show_chat_history_button: bool = True
     chat_response_contactmessage: str = "AI-generated content may be incorrect"
+    poweredby: str = ""
+    poweredbycomp: str = ""
+    poweredbyurl: str = "test"
+    headertitle: str = ""
 
 
 class _ChatHistorySettings(BaseSettings):

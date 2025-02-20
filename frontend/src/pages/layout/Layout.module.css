@@ -18,10 +18,21 @@
   display: flex;
   align-items: center;
   margin-left: 14px;
+  text-decoration: none;
 }
 
 .headerTitle {
   font-style: normal;
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 28px;
+  display: flex;
+  align-items: flex-end;
+  color: #242424;
+}
+
+.powered {
+  font-style: italic;
   font-weight: 600;
   font-size: 11px;
   line-height: 28px;
@@ -30,7 +41,7 @@
   color: #242424;
 }
 
-.headerTitleLink {
+.poweredbycomp {
   font-style: italic;
   font-weight: 600;
   font-size: 11px;

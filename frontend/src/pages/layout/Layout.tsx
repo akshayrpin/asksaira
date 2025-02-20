@@ -78,10 +78,11 @@ const Layout = () => {
       <header className={styles.header} role={'banner'}>
         <Stack horizontal verticalAlign="center" horizontalAlign="space-between">
           <Stack horizontal verticalAlign="center">
-            <img src={logo} className={styles.headerIcon} aria-hidden="true" alt="" />
+            <img src={logo} className={styles.headerIcon} aria-hidden="true" alt="" />&nbsp;
+            <h1 className={styles.headerTitle}>{ui?.headertitle}</h1>
             <Link to="https://www.sairasolutions.com/" target="_blank" className={styles.headerTitleContainer}>
-              <h1 className={styles.headerTitle}>{ui?.title}</h1>
-              <h1 className={styles.headerTitleLink}>{ui?.titlelink}</h1>
+              <h1 className={styles.powered}>{ui?.poweredby}</h1>&nbsp;
+              <h1 className={styles.poweredbycomp}>{ui?.poweredbycomp}</h1>
             </Link>
           </Stack>
           <Stack horizontal tokens={{ childrenGap: 4 }} className={styles.shareButtonContainer}>
