@@ -158,24 +158,19 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
         <div>Why wasn't this response helpful?</div>
         <Stack tokens={{ childrenGap: 4 }}>
           <Checkbox
-            label="Citations are missing"
-            id={Feedback.MissingCitation}
-            defaultChecked={negativeFeedbackList.includes(Feedback.MissingCitation)}
-            onChange={updateFeedbackList}></Checkbox>
-          <Checkbox
-            label="Citations are wrong"
+            label="The response isn't helpful."
             id={Feedback.WrongCitation}
             defaultChecked={negativeFeedbackList.includes(Feedback.WrongCitation)}
-            onChange={updateFeedbackList}></Checkbox>
+            onChange={updateFeedbackList}></Checkbox>          
           <Checkbox
-            label="The response is not from my data"
-            id={Feedback.OutOfScope}
-            defaultChecked={negativeFeedbackList.includes(Feedback.OutOfScope)}
-            onChange={updateFeedbackList}></Checkbox>
-          <Checkbox
-            label="Inaccurate or irrelevant"
+            label="The response isn't accurate."
             id={Feedback.InaccurateOrIrrelevant}
             defaultChecked={negativeFeedbackList.includes(Feedback.InaccurateOrIrrelevant)}
+            onChange={updateFeedbackList}></Checkbox>
+          <Checkbox
+            label="There was an issue with the supporting references."
+            id={Feedback.OutOfScope}
+            defaultChecked={negativeFeedbackList.includes(Feedback.OutOfScope)}
             onChange={updateFeedbackList}></Checkbox>
           <Checkbox
             label="Other"
