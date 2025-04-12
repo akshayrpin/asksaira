@@ -84,7 +84,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
       citationFilename = `Citation ${index}`
     }
 
-    if(citationFilename.includes("#")) {
+    if(citation.title && citation.title.includes("#")) {
       let url = citation.title?citation.title:citationFilename
       url = url.replaceAll("U+3F", "?")
       url = url.replaceAll("U+3A", ":")
@@ -371,8 +371,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
         {chevronIsExpanded && (
           <div className={styles.citationWrapper}>
             {parsedAnswer?.citations.map((citation, idx) => {
-              console.log(citation.filepath)
-              if(citation.filepath != null && citation.filepath.includes("#")) {
+              if(citation.title != null && citation.title.includes("#")) {
                 return (
                   <a href={createCitationFilepath(citation, ++idx)}
                     tabIndex={0}
