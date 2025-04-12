@@ -83,6 +83,22 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
     } else {
       citationFilename = `Citation ${index}`
     }
+
+    if(citationFilename.includes("#")) {
+      let url = citation.title?citation.title:citationFilename
+      url = url.replaceAll("U+3F", "?")
+      url = url.replaceAll("U+3A", ":")
+      url = url.replaceAll("U+2A", "*")
+      url = url.replaceAll("U+22", "\"")
+      url = url.replaceAll("U+3C", "<")
+      url = url.replaceAll("U+3E", ">")
+      url = url.replaceAll("U+7C", "|")
+      url = url.replaceAll("#", "/")
+      url = url.replaceAll(".html", "")
+      url = "https://" + url
+      citationFilename = url
+    }
+
     return citationFilename
   }
 
@@ -355,20 +371,36 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
         {chevronIsExpanded && (
           <div className={styles.citationWrapper}>
             {parsedAnswer?.citations.map((citation, idx) => {
-              return (
-                <span
-                  title={createCitationFilepath(citation, ++idx)}
-                  tabIndex={0}
-                  role="link"
-                  key={idx}
-                  onClick={() => onCitationClicked(citation)}
-                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? onCitationClicked(citation) : null)}
-                  className={styles.citationContainer}
-                  aria-label={createCitationFilepath(citation, idx)}>
-                  <div className={styles.citation}>{idx}</div>
-                  {createCitationFilepath(citation, idx, true)}
-                </span>
-              )
+              console.log(citation.filepath)
+              if(citation.filepath != null && citation.filepath.includes("#")) {
+                return (
+                  <a href={createCitationFilepath(citation, ++idx)}
+                    tabIndex={0}
+                    role="link"
+                    key={idx}
+                    target='_blank'
+                    className={styles.citationContainer}
+                    aria-label={createCitationFilepath(citation, idx)}>
+                    <div className={styles.citation}>{idx}</div>
+                    {createCitationFilepath(citation, idx, true)}
+                  </a>
+                )
+              } else {
+                return (
+                  <span
+                    title={createCitationFilepath(citation, ++idx)}
+                    tabIndex={0}
+                    role="link"
+                    key={idx}
+                    onClick={() => onCitationClicked(citation)}
+                    onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? onCitationClicked(citation) : null)}
+                    className={styles.citationContainer}
+                    aria-label={createCitationFilepath(citation, idx)}>
+                    <div className={styles.citation}>{idx}</div>
+                    {createCitationFilepath(citation, idx, true)}
+                  </span>
+                )
+              }              
             })}
           </div>
         )}

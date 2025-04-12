@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useContext, useLayoutEffect } from 'react'
 import { CommandBarButton, IconButton, Dialog, DialogType, Stack } from '@fluentui/react'
-import { SquareRegular, ShieldLockRegular, ErrorCircleRegular } from '@fluentui/react-icons'
+import { SquareRegular, ShieldLockRegular, ErrorCircleRegular,CommentDismissRegular,StackStarRegular,EmojiSparkleRegular } from '@fluentui/react-icons'
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -580,7 +580,7 @@ const Chat = () => {
         // Returning the prettified error message
         if (reason !== '') {
           return (
-            'The prompt was filtered due to triggering Azure OpenAI’s content filtering system.\n' +
+            'The prompt was filtered due to triggering Azure OpenAIâ€™s content filtering system.\n' +
             'Reason: This prompt contains content flagged as ' +
             reason +
             '\n\n' +
@@ -790,11 +790,64 @@ const Chat = () => {
         <Stack horizontal className={styles.chatRoot}>
           <div className={styles.chatContainer}>
             {!messages || messages.length < 1 ? (
-              <Stack className={styles.chatEmptyState}>
-                <img src={logo} className={styles.chatIcon} aria-hidden="true" />
-                <h1 className={styles.chatEmptyStateTitle}>{ui?.chat_title}</h1>
-                <h2 className={styles.chatEmptyStateSubtitle}>{ui?.chat_description}</h2>
-              </Stack>
+              <div>
+                {ui?.chat_title && ui?.chat_title.length > 0 ? (
+                  <Stack className={styles.chatEmptyState}>
+                    <img src={logo} className={styles.chatIcon} aria-hidden="true" />
+                    <h1 className={styles.chatEmptyStateTitle}>{ui?.chat_title}</h1>
+                    <h2 className={styles.chatEmptyStateSubtitle}>{ui?.chat_description}</h2>
+                  </Stack>
+                ) : (
+                  <Stack className={styles.chatEmptyState}>
+                    <div className={styles.aiContainer}>
+                      <section className={styles.aiQuestions}>
+                        <div className={styles.aiIconText}>
+                          <StackStarRegular className={styles.aiIcon} />
+                          <span>{ui?.example_title}</span>
+                        </div>
+                        <div className={styles.aiQuestionWrapper}>
+                          <div className={styles.aiQuestionGrid}>
+                            <button className={styles.aiQuestionOptions}>{ui?.example_option_1}</button>
+                            <button className={styles.aiQuestionOptions}>{ui?.example_option_2}</button>
+                          </div>
+                          <div className={styles.aiQuestionGrid}>
+                            <button className={styles.aiQuestionOptions}>{ui?.example_option_3}</button>
+                            <button className={styles.aiQuestionOptions}>{ui?.example_option_4}</button>
+                          </div>
+                        </div>
+                      </section>
+                      <section className={styles.aiCapabilities}>
+                        <div className={styles.aiColumn}>
+                          <div className={styles.aiIconText}>
+                            <EmojiSparkleRegular className={styles.aiIcon} />
+                            <span>{ui?.capabilities}</span>
+                          </div>
+                          <div className={styles.aiCardCapabilities}>
+                            <ul>
+                              <li>{ui?.capabilities_1}</li>
+                              <li>{ui?.capabilities_2}</li>
+                              <li>{ui?.capabilities_3}</li>
+                            </ul>
+                          </div>
+                        </div>
+                        <div className={styles.aiColumn}>
+                          <div className={styles.aiIconText}>
+                            <CommentDismissRegular className={styles.aiIcon} />
+                            <span>{ui?.limitations}</span>
+                          </div>
+                          <div className={styles.aiCardLimitations}>
+                            <ul>
+                              <li>{ui?.limitations_1}</li>
+                              <li>{ui?.limitations_2}</li>
+                              <li>{ui?.limitations_3}</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </section>
+                    </div>
+                  </Stack>
+                )}
+              </div>
             ) : (
               <div className={styles.chatMessageStream} style={{ marginBottom: isLoading ? '40px' : '0px' }} role="log" ref={chatMessageStreamEnd} >
                 {messages.map((answer, index) => (
@@ -867,7 +920,7 @@ const Chat = () => {
                 </Stack>
               )}
               <Stack>
-                {appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured && (
+              {/* {appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured && (
                   <CommandBarButton
                     role="button"
                     styles={{
@@ -892,7 +945,7 @@ const Chat = () => {
                     disabled={disabledButton()}
                     aria-label="start a new chat button"
                   />
-                )}
+                )} */}
                 <CommandBarButton
                   role="button"
                   styles={{

@@ -44,7 +44,7 @@ class _UiSettings(BaseSettings):
     title: str = "Contoso"
     logo: Optional[str] = None
     chat_logo: Optional[str] = None
-    chat_title: str = "Start chatting"
+    chat_title: str = ""
     chat_description: str = "This chatbot is configured to answer your questions"
     favicon: str = "/favicon.ico"
     show_share_button: bool = True
@@ -52,8 +52,25 @@ class _UiSettings(BaseSettings):
     chat_response_contactmessage: str = "AI-generated content may be incorrect"
     poweredby: str = ""
     poweredbycomp: str = ""
-    poweredbyurl: str = "test"
+    poweredbyurl: str = ""
     headertitle: str = ""
+
+    example_logo: Optional[str] = None
+    example_title: Optional[str] = None
+    example_option_1: Optional[str] = None
+    example_option_2: Optional[str] = None
+    example_option_3: Optional[str] = None
+    example_option_4: Optional[str] = None
+    capabilities_logo: Optional[str] = None
+    capabilities: Optional[str] = None
+    capabilities_1: Optional[str] = None
+    capabilities_2: Optional[str] = None
+    capabilities_3: Optional[str] = None
+    limitations_logo: Optional[str] = None
+    limitations: Optional[str] = None
+    limitations_1: Optional[str] = None
+    limitations_2: Optional[str] = None
+    limitations_3: Optional[str] = None
 
 
 class _ChatHistorySettings(BaseSettings):
@@ -84,7 +101,7 @@ class _PromptflowSettings(BaseSettings):
     response_timeout: float = 30.0
     request_field_name: str = "query"
     response_field_name: str = "reply"
-    citations_field_name: str = "documents"
+    citations_field_name: str = "url"
 
 
 class _AzureOpenAIFunction(BaseModel):

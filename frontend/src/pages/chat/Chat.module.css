@@ -9,17 +9,18 @@
   flex: 1;
   display: flex;
   margin-top: 0px;
-  margin-bottom: 20px;
-  margin-left: 20px;
-  margin-right: 20px;
+  margin-bottom: 0px;
+  margin-left: 0px;
+  margin-right: 0px;
   gap: 5px;
+  border-top: 1px solid #e0e0e0;
 }
 
 .chatContainer {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* align-items: center; */
   background: radial-gradient(108.78% 108.78% at 50.02% 19.78%, #ffffff 57.29%, #eef6fe 100%);
   box-shadow:
     0px 2px 4px rgba(0, 0, 0, 0.14),
@@ -32,14 +33,15 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  align-items: center;
+  /* align-items: center; */
+  padding: 40px;
 }
 
 .chatEmptyStateTitle {
   font-style: normal;
   font-weight: 700;
   font-size: 36px;
-  display: flex;
+  /*display: flex;*/
   align-items: flex-end;
   text-align: center;
   line-height: 24px;
@@ -60,13 +62,14 @@
 }
 
 .chatIcon {
+  align-items: center;
   height: 62px;
   width: auto;
 }
 
 .chatMessageStream {
   flex-grow: 1;
-  max-width: 1028px;
+  /* max-width: 1028px; */
   width: 100%;
   height: 400px;
   overflow-y: scroll;
@@ -75,6 +78,7 @@
   display: flex;
   flex-direction: column;
   margin-top: 24px;
+  padding: 40px;
 }
 
 .chatMessageUser {
@@ -143,10 +147,10 @@
   padding-bottom: 24px;
   padding-left: 24px;
   padding-right: 24px;
-  width: calc(100% - 100px);
-  max-width: 1028px;
-  margin-bottom: 50px;
-  margin-top: 8px;
+  /* width: calc(100% - 100px);
+   max-width: 1028px; */
+  margin: 8px 40px 50px 35px;;
+  /* margin-top: 8px; */
 }
 
 .clearChatBroom {
@@ -159,7 +163,7 @@
   width: 40px;
   height: 40px;
   left: 7px;
-  top: 13px;
+  top: 66px;
   color: #ffffff;
   border-radius: 4px;
   z-index: 1;
@@ -394,4 +398,105 @@ a {
   .citationPanel {
     max-width: 100%;
   }
+
+  .aiQuestionOptions {
+    flex: 0 0 100%;
+  }
+}
+
+.aiContainer {
+	display: flex;
+	gap: 40px;
+	flex-wrap: wrap;
+  flex-direction: column;
+}
+
+.aiIcon{
+  font-size: 20px;
+  margin-right: 5px;
+}
+
+.aiIconText {
+  display: flex; 
+  align-items: center;
+  gap: 0px;
+  margin-bottom: 10px;
+}
+
+.aiIconText span {
+  font-size: 18px;
+  font-weight: 100;
+}
+
+.aiQuestionWrapper{
+	display: flex;
+	flex-wrap: wrap;
+  gap:10px;
+}
+
+.aiQuestionGrid {
+	flex: 1;
+}
+
+.aiQuestionOptions {
+	font-size: 12px;
+	border: 1px solid #fff;
+	background: white;
+	border-radius: 10px;
+	cursor: pointer;
+	transition: all 0.2s ease;
+	box-shadow: 0px 0px 3px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  padding: 10px 0px;
+  margin: 7px 0 0px 0px;
+}
+
+.aiQuestionOptions:hover {
+	background-color: #f9f9f9;
+}
+
+.aiCardCapabilities {
+	flex: 1;
+	min-width: 300px;
+	padding: 1px;
+	border-radius: 12px;
+	background-color: #d9f0f0;
+}
+
+.aiCardLimitations {
+	flex: 1;
+	min-width: 300px;
+	padding: 1px;
+	border-radius: 12px;
+	background-color: #f6f6f6;
+}
+
+.aiCapabilities{
+  display: flex;
+	gap: 40px;
+	flex-wrap: wrap;
+}
+
+.aiColumn {
+	flex: 1;
+}
+
+.aiColumn span, .aiQuestions span {
+	font-size: 18px;
+	font-weight: 100;
+}
+
+.aiCardLimitations ul, .aiCardCapabilities ul {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+  margin: 25px 0px 25px 0px;
+}
+
+.aiCardLimitations li, .aiCardCapabilities li {
+	font-size: 10px;
+}
+
+.aiCard ul {
+	padding-left: 20px;
 }

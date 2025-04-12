@@ -136,6 +136,26 @@ export type UI = {
   poweredbycomp: string
   poweredbyurl: string
   headertitle: string
+  chat_example:string
+  
+  example_logo?: string
+  example_title:string
+  example_option_1:string
+  example_option_2:string
+  example_option_3:string
+  example_option_4:string
+
+  capabilities_logo?: string
+  capabilities:string
+  capabilities_1:string
+  capabilities_2:string
+  capabilities_3:string
+
+  limitations_logo?: string
+  limitations:string
+  limitations_1:string
+  limitations_2:string
+  limitations_3:string
 }
 
 export type FrontendSettings = {
