@@ -855,11 +855,14 @@ const Chat = () => {
                     {answer.role === 'user' ? (
                       <div className={styles.chatMessageUser} tabIndex={0}>
                         <div className={styles.chatMessageUserMessage}>
+                          <div className={styles.chatMessageMargin}>
                           {typeof answer.content === "string" && answer.content ? answer.content : Array.isArray(answer.content) ? <>{answer.content[0].text} <img className={styles.uploadedImageChat} src={answer.content[1].image_url.url} alt="Uploaded Preview" /></> : null}
+                          </div>
                         </div>
                       </div>
                     ) : answer.role === 'assistant' ? (
                       <div className={styles.chatMessageGpt}>
+                        <img src={ui?.chat_resp_logo} className={styles.chatIcon} aria-hidden="true" />
                         {typeof answer.content === "string" && <Answer
                           answer={{
                             answer: answer.content,

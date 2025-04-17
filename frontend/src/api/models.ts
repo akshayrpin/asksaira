@@ -156,6 +156,7 @@ export type UI = {
   limitations_1:string
   limitations_2:string
   limitations_3:string
+  chat_resp_logo:string
 }
 
 export type FrontendSettings = {

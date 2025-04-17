@@ -25,7 +25,7 @@
   box-shadow:
     0px 2px 4px rgba(0, 0, 0, 0.14),
     0px 0px 2px rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
+  border-radius: 0px;
 }
 
 .chatEmptyState {
@@ -41,7 +41,7 @@
   font-style: normal;
   font-weight: 700;
   font-size: 36px;
-  /*display: flex;*/
+  display: flex;
   align-items: flex-end;
   text-align: center;
   line-height: 24px;
@@ -62,15 +62,16 @@
 }
 
 .chatIcon {
-  align-items: center;
-  height: 62px;
-  width: auto;
+  width: 36px;
+  height: 36px;
+  background-color: #2b7883;
+  border-radius:50%;
 }
 
 .chatMessageStream {
   flex-grow: 1;
-  /* max-width: 1028px; */
-  width: 100%;
+  /* max-width: 1028px;
+  width: 100%; */
   height: 400px;
   overflow-y: scroll;
   padding-left: 24px;
@@ -90,8 +91,8 @@
 .chatMessageUserMessage {
   position: relative;
   display: flex;
-  padding: 20px;
-  background: #edf5fd;
+  padding: 12px;
+  /* background: #edf5fd; */
   border-radius: 8px;
   box-shadow:
     0px 2px 4px rgba(0, 0, 0, 0.14),
@@ -108,10 +109,15 @@
   max-width: 80%;
 }
 
+.chatMessageMargin{
+  margin: 0px 10px 0px 10px;
+}
+
 .chatMessageGpt {
   margin-bottom: 12px;
-  max-width: 80%;
+  /* max-width: 80%; */
   display: flex;
+  margin-top: 50px;
 }
 
 .chatMessageError {
