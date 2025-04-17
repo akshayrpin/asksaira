@@ -788,11 +788,11 @@ const Chat = () => {
         </Stack>
       ) : (
         <Stack horizontal className={styles.chatRoot}>
-          <div className={styles.chatContainer}>
+          <div className={styles.chatContainer} style={{ fontSize: '20px' }}>
             {!messages || messages.length < 1 ? (
               <div>
                 {ui?.chat_title && ui?.chat_title.length > 0 ? (
-                  <Stack className={styles.chatEmptyState}>
+                  <Stack className={styles.chatEmptyState} style={{ alignItems: 'center' }}>
                     <img src={logo} className={styles.chatIcon} aria-hidden="true" />
                     <h1 className={styles.chatEmptyStateTitle}>{ui?.chat_title}</h1>
                     <h2 className={styles.chatEmptyStateSubtitle}>{ui?.chat_description}</h2>
