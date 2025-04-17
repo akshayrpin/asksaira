@@ -788,7 +788,7 @@ const Chat = () => {
         </Stack>
       ) : (
         <Stack horizontal className={styles.chatRoot}>
-          <div className={styles.chatContainer} style={{ fontSize: '20px' }}>
+          <div className={styles.chatContainer} style={{ fontSize: '20px' }} >
             {!messages || messages.length < 1 ? (
               <div>
                 {ui?.chat_title && ui?.chat_title.length > 0 ? (
