@@ -138,6 +138,7 @@ export type UI = {
   headertitle: string
   chat_example:string
   
+  hand_wave_icon?: string
   example_logo?: string
   example_title:string
   example_option_1:string

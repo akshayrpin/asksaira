@@ -788,64 +788,100 @@ const Chat = () => {
         </Stack>
       ) : (
         <Stack horizontal className={styles.chatRoot}>
-          <div className={styles.chatContainer} style={{ fontSize: '20px' }} >
+          <div className={styles.chatContainer}>
             {!messages || messages.length < 1 ? (
               <div>
                 {ui?.chat_title && ui?.chat_title.length > 0 ? (
                   <Stack className={styles.chatEmptyState} style={{ alignItems: 'center' }}>
                     <img src={logo} className={styles.chatIcon} aria-hidden="true" />
                     <h1 className={styles.chatEmptyStateTitle}>{ui?.chat_title}</h1>
-                    <h2 className={styles.chatEmptyStateSubtitle}>{ui?.chat_description}</h2>
+                    <h2 className={styles.chatEmptyStateSubtitle}>{ui?.chat_description}</h2>                
+                    <Stack horizontal className={styles.chatInput}>
+                    <QuestionInput
+                      clearOnSend
+                      placeholder="Type your question here..."
+                      disabled={isLoading}
+                      onSend={(question, id) => {
+                        appStateContext?.state.isCosmosDBAvailable?.cosmosDB
+                          ? makeApiRequestWithCosmosDB(question, id)
+                          : makeApiRequestWithoutCosmosDB(question, id)
+                      }}
+                      conversationId={
+                        appStateContext?.state.currentChat?.id ? appStateContext?.state.currentChat?.id : undefined
+                      }
+                      questionInputTop="Y"
+                    />
+                    </Stack>
                   </Stack>
                 ) : (
-                  <Stack className={styles.chatEmptyState}>
-                    <div className={styles.aiContainer}>
-                      <section className={styles.aiQuestions}>
+                <Stack className={styles.chatEmptyState}>
+                  <div className={styles.aiContainer}>
+                    {ui?.hand_wave_icon && ui?.hand_wave_icon.length > 0 ? (
+                      <section className={styles.aiLabel}>
+                        <span>Hi there! 
+                        <img src={ui?.hand_wave_icon} alt="Icon" className={styles.aiWaveIcon}/> 
+                        {ui?.chat_description}</span>
+                      </section>
+                    ) : ( 
+                      <span>{ui?.chat_description}</span>
+                    )}
+                    <Stack horizontal className={styles.chatInputTop}>
+                      <QuestionInput
+                        clearOnSend
+                        placeholder="Type your question here..."
+                        disabled={isLoading}
+                        onSend={(question, id) => {
+                          appStateContext?.state.isCosmosDBAvailable?.cosmosDB
+                            ? makeApiRequestWithCosmosDB(question, id)
+                            : makeApiRequestWithoutCosmosDB(question, id)
+                        }}
+                        conversationId={
+                          appStateContext?.state.currentChat?.id ? appStateContext?.state.currentChat?.id : undefined
+                        }
+                        questionInputTop="Y"
+                      />
+                    </Stack>
+                    <section className={styles.aiQuestions}>
+                      <div className={styles.aiIconText}>
+                        <StackStarRegular className={[styles.aiIcon, styles.bgGreen].join(' ')}/>
+                        <span>{ui?.example_title}</span>
+                      </div>
+                      <div className={styles.aiQuestionGrid}>
+                        <button className={styles.aiQuestionOptions}>{ui?.example_option_1}</button>
+                        <button className={styles.aiQuestionOptions}>{ui?.example_option_2}</button>
+                        <button className={styles.aiQuestionOptions}>{ui?.example_option_3}</button>
+                      </div>
+                    </section>
+                    <section className={styles.aiCLContainer}>
+                      <div className={[styles.aiColumn, styles.aiCapabilitiesContainer].join(' ')}>
                         <div className={styles.aiIconText}>
-                          <StackStarRegular className={styles.aiIcon} />
-                          <span>{ui?.example_title}</span>
+                          <EmojiSparkleRegular className={[styles.aiIcon, styles.bgBlue].join(' ')} />
+                          <span>{ui?.capabilities}</span>
                         </div>
-                        <div className={styles.aiQuestionWrapper}>
-                          <div className={styles.aiQuestionGrid}>
-                            <button className={styles.aiQuestionOptions}>{ui?.example_option_1}</button>
-                            <button className={styles.aiQuestionOptions}>{ui?.example_option_2}</button>
-                          </div>
-                          <div className={styles.aiQuestionGrid}>
-                            <button className={styles.aiQuestionOptions}>{ui?.example_option_3}</button>
-                            <button className={styles.aiQuestionOptions}>{ui?.example_option_4}</button>
-                          </div>
+                        <div className={styles.aiCardCapabilities}>
+                          <ul>
+                            <li>{ui?.capabilities_1}</li>
+                            <li>{ui?.capabilities_2}</li>
+                            <li>{ui?.capabilities_3}</li>
+                          </ul>
                         </div>
-                      </section>
-                      <section className={styles.aiCapabilities}>
-                        <div className={styles.aiColumn}>
-                          <div className={styles.aiIconText}>
-                            <EmojiSparkleRegular className={styles.aiIcon} />
-                            <span>{ui?.capabilities}</span>
-                          </div>
-                          <div className={styles.aiCardCapabilities}>
-                            <ul>
-                              <li>{ui?.capabilities_1}</li>
-                              <li>{ui?.capabilities_2}</li>
-                              <li>{ui?.capabilities_3}</li>
-                            </ul>
-                          </div>
+                      </div>
+                      <div className={[styles.aiColumn, styles.aiLimitationsContainer].join(' ')}>
+                        <div className={styles.aiIconText}>
+                          <CommentDismissRegular className={[styles.aiIcon, styles.bgGray].join(' ')} />
+                          <span>{ui?.limitations}</span>
                         </div>
-                        <div className={styles.aiColumn}>
-                          <div className={styles.aiIconText}>
-                            <CommentDismissRegular className={styles.aiIcon} />
-                            <span>{ui?.limitations}</span>
-                          </div>
-                          <div className={styles.aiCardLimitations}>
-                            <ul>
-                              <li>{ui?.limitations_1}</li>
-                              <li>{ui?.limitations_2}</li>
-                              <li>{ui?.limitations_3}</li>
-                            </ul>
-                          </div>
+                        <div className={styles.aiCardLimitations}>
+                          <ul>
+                            <li>{ui?.limitations_1}</li>
+                            <li>{ui?.limitations_2}</li>
+                            <li>{ui?.limitations_3}</li>
+                          </ul>
                         </div>
-                      </section>
-                    </div>
-                  </Stack>
+                      </div>
+                    </section>
+                  </div>
+                </Stack>
                 )}
               </div>
             ) : (
@@ -905,25 +941,24 @@ const Chat = () => {
                 <div/>
               </div>
             )}
-
-            <Stack horizontal className={styles.chatInput}>
-              {isLoading && messages.length > 0 && (
-                <Stack
-                  horizontal
-                  className={styles.stopGeneratingContainer}
-                  role="button"
-                  aria-label="Stop generating"
-                  tabIndex={0}
-                  onClick={stopGenerating}
-                  onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? stopGenerating() : null)}>
-                  <SquareRegular className={styles.stopGeneratingIcon} aria-hidden="true" />
-                  <span className={styles.stopGeneratingText} aria-hidden="true">
-                    Stop generating
-                  </span>
-                </Stack>
-              )}
-              <Stack>
-              {/* {appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured && (
+            {messages.length > 0 && (
+              <Stack horizontal className={styles.chatInput}>
+                {isLoading && messages.length > 0 && (
+                  <Stack
+                    horizontal
+                    className={styles.stopGeneratingContainer}
+                    role="button"
+                    aria-label="Stop generating"
+                    tabIndex={0}
+                    onClick={stopGenerating}
+                    onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? stopGenerating() : null)}>
+                    <SquareRegular className={styles.stopGeneratingIcon} aria-hidden="true" />
+                    <span className={styles.stopGeneratingText} aria-hidden="true">
+                      Stop generating
+                    </span>
+                  </Stack>
+                )}
+                <Stack>
                   <CommandBarButton
                     role="button"
                     styles={{
@@ -942,65 +977,42 @@ const Chat = () => {
                         background: '#F0F0F0'
                       }
                     }}
-                    className={styles.newChatIcon}
-                    iconProps={{ iconName: 'Add' }}
-                    onClick={newChat}
-                    disabled={disabledButton()}
-                    aria-label="start a new chat button"
-                  />
-                )} */}
-                <CommandBarButton
-                  role="button"
-                  styles={{
-                    icon: {
-                      color: '#FFFFFF'
-                    },
-                    iconDisabled: {
-                      color: '#BDBDBD !important'
-                    },
-                    root: {
-                      color: '#FFFFFF',
-                      background:
-                        'radial-gradient(109.81% 107.82% at 100.1% 90.19%, #0F6CBD 33.63%, #2D87C3 70.31%, #8DDDD8 100%)'
-                    },
-                    rootDisabled: {
-                      background: '#F0F0F0'
+                    className={
+                      appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured
+                        ? styles.clearChatBroom
+                        : styles.clearChatBroomNoCosmos
                     }
+                    iconProps={{ iconName: 'Broom' }}
+                    onClick={
+                      appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured
+                        ? clearChat
+                        : newChat
+                    }
+                    disabled={disabledButton()}
+                    aria-label="clear chat button"
+                  />
+                  <Dialog
+                    hidden={hideErrorDialog}
+                    onDismiss={handleErrorDialogClose}
+                    dialogContentProps={errorDialogContentProps}
+                    modalProps={modalProps}></Dialog>
+                </Stack>
+                <QuestionInput
+                  clearOnSend
+                  placeholder="Type a new question..."
+                  disabled={isLoading}
+                  onSend={(question, id) => {
+                    appStateContext?.state.isCosmosDBAvailable?.cosmosDB
+                      ? makeApiRequestWithCosmosDB(question, id)
+                      : makeApiRequestWithoutCosmosDB(question, id)
                   }}
-                  className={
-                    appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured
-                      ? styles.clearChatBroom
-                      : styles.clearChatBroomNoCosmos
+                  conversationId={
+                    appStateContext?.state.currentChat?.id ? appStateContext?.state.currentChat?.id : undefined
                   }
-                  iconProps={{ iconName: 'Broom' }}
-                  onClick={
-                    appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured
-                      ? clearChat
-                      : newChat
-                  }
-                  disabled={disabledButton()}
-                  aria-label="clear chat button"
+                  questionInputTop="N"
                 />
-                <Dialog
-                  hidden={hideErrorDialog}
-                  onDismiss={handleErrorDialogClose}
-                  dialogContentProps={errorDialogContentProps}
-                  modalProps={modalProps}></Dialog>
               </Stack>
-              <QuestionInput
-                clearOnSend
-                placeholder="Type a new question..."
-                disabled={isLoading}
-                onSend={(question, id) => {
-                  appStateContext?.state.isCosmosDBAvailable?.cosmosDB
-                    ? makeApiRequestWithCosmosDB(question, id)
-                    : makeApiRequestWithoutCosmosDB(question, id)
-                }}
-                conversationId={
-                  appStateContext?.state.currentChat?.id ? appStateContext?.state.currentChat?.id : undefined
-                }
-              />
-            </Stack>
+            )}
           </div>
           {/* Citation Panel */}
           {messages && messages.length > 0 && isCitationPanelOpen && activeCitation && (

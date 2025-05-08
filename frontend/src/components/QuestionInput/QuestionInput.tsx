@@ -15,9 +15,11 @@ interface Props {
   placeholder?: string
   clearOnSend?: boolean
   conversationId?: string
+  questionInputTop?: string
 }
 
-export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conversationId }: Props) => {
+
+export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conversationId,questionInputTop }: Props) => {
   const [question, setQuestion] = useState<string>('')
   const [base64Image, setBase64Image] = useState<string | null>(null);
 
@@ -75,7 +77,7 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
   const sendQuestionDisabled = disabled || !question.trim()
 
   return (
-    <Stack horizontal className={styles.questionInputContainer}>
+    <Stack horizontal className={questionInputTop == "Y" ? styles.questionInputContainerTop : styles.questionInputContainer}>
       <TextField
         className={styles.questionInputTextArea}
         placeholder={placeholder}
@@ -114,10 +116,11 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
         {sendQuestionDisabled ? (
           <SendRegular className={styles.questionInputSendButtonDisabled} />
         ) : (
-          <img src={Send} className={styles.questionInputSendButton} alt="Send Button" />
+          // <img src={Send} className={styles.questionInputSendButton} alt="Send Button" />
+          <SendRegular className={styles.questionInputSendButton} />
         )}
       </div>
-      <div className={styles.questionInputBottomBorder} />
+      {/* <div className={styles.questionInputBottomBorder} /> */}
     </Stack>
   )
 }
