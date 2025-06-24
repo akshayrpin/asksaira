@@ -87,6 +87,18 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
       citationFilename = `Citation ${index}`
     }
 
+    if(citationFilename.includes("#")) {
+      citationFilename = citationFilename.replaceAll("U+3F", "?")
+      citationFilename = citationFilename.replaceAll("U+3A", ":")
+      citationFilename = citationFilename.replaceAll("U+2A", "*")
+      citationFilename = citationFilename.replaceAll("U+22", "\"")
+      citationFilename = citationFilename.replaceAll("U+3C", "<")
+      citationFilename = citationFilename.replaceAll("U+3E", ">")
+      citationFilename = citationFilename.replaceAll("U+7C", "|")
+      citationFilename = citationFilename.replaceAll("#", "/")
+      citationFilename = citationFilename.replaceAll(".html", "")
+    }
+
     if(citation.title && citation.title.includes("#")) {
       let url = citation.title?citation.title:citationFilename
       url = url.replaceAll("U+3F", "?")
