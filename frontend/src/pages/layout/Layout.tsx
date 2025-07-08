@@ -94,7 +94,7 @@ const Layout = () => {
             )}
             {ui?.show_share_button && <ShareButton onClick={handleShareClick} text={shareLabel} />}
           </Stack>
-          {ui?.show_permit_link !== false && (
+          {ui?.show_permit_link && (
           <Stack horizontal>
               <Link to="https://apps.gis.lacounty.gov/dpw/m/?viewer=bpv_wf5" target="_blank" className={styles.headerTitleContainer}>
               <h4 className={styles.permitlink}>Click here for Historical Permit Data</h4>&nbsp;

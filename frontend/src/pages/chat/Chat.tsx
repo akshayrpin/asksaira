@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useContext, useLayoutEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { CommandBarButton, IconButton, Dialog, DialogType, Stack } from '@fluentui/react'
 import { SquareRegular, ShieldLockRegular, ErrorCircleRegular,CommentDismissRegular,StackStarRegular,EmojiSparkleRegular } from '@fluentui/react-icons'
 
@@ -716,6 +717,13 @@ const Chat = () => {
     }
   }
 
+  const parsemessage = (message: string) => {
+    if(ui?.show_permit_link == true && message.includes('permit')) {
+      message +=' If you need permit details for a specific property, Please click here  [LA County Building Permit Viewer](https://apps.gis.lacounty.gov/dpw/m/?viewer=bpv_wf5)'
+    }
+    return message
+  }
+
   const parseCitationFromMessage = (message: ChatMessage) => {
     if (message?.role && message?.role === 'tool' && typeof message?.content === "string") {
       try {
@@ -898,10 +906,10 @@ const Chat = () => {
                       </div>
                     ) : answer.role === 'assistant' ? (
                       <div className={styles.chatMessageGpt}>
-                        <img src={ui?.chat_resp_logo} className={styles.chatIcon} aria-hidden="true" />
+                        <img src={ui?.chat_resp_logo} className={styles.chatIcon} aria-hidden="true" />                        
                         {typeof answer.content === "string" && <Answer
                           answer={{
-                            answer: answer.content,
+                            answer: parsemessage(answer.content),
                             citations: parseCitationFromMessage(messages[index - 1]),
                             generated_chart: parsePlotFromMessage(messages[index - 1]),
                             message_id: answer.id,
@@ -996,7 +1004,7 @@ const Chat = () => {
                     onDismiss={handleErrorDialogClose}
                     dialogContentProps={errorDialogContentProps}
                     modalProps={modalProps}></Dialog>
-                </Stack>
+                </Stack>                
                 <QuestionInput
                   clearOnSend
                   placeholder="Type a new question..."
@@ -1011,7 +1019,7 @@ const Chat = () => {
                   }
                   questionInputTop="N"
                 />
-              </Stack>
+              </Stack>              
             )}
           </div>
           {/* Citation Panel */}
