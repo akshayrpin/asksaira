@@ -83,6 +83,7 @@ const Chat = () => {
 
   const [ASSISTANT, TOOL, ERROR] = ['assistant', 'tool', 'error']
   const NO_CONTENT_ERROR = 'No content in messages object.'
+  const [permitpresent, setPermitPresent] = useState<string>('')
 
   useEffect(() => {
     if (
@@ -195,6 +196,9 @@ const Chat = () => {
       content: questionContent as string,
       date: new Date().toISOString()
     }
+    let permittext = questionContent as string
+
+    {permittext.includes("permit")?setPermitPresent('Y'):setPermitPresent('N')}
 
     let conversation: Conversation | null | undefined
     if (!conversationId) {
@@ -718,8 +722,8 @@ const Chat = () => {
   }
 
   const parsemessage = (message: string) => {
-    if(ui?.show_permit_link == true && message.includes('permit')) {
-      message +=' If you need permit details for a specific property, Please click here  [LA County Building Permit Viewer](https://apps.gis.lacounty.gov/dpw/m/?viewer=bpv_wf5)'
+    if((ui?.show_permit_link == true && permitpresent == 'Y') || (ui?.show_permit_link == true && message.includes('permit'))) {
+      message += ' If you need permit details for a specific property, Please click here  [LA County Building Permit Viewer](https://apps.gis.lacounty.gov/dpw/m/?viewer=bpv_wf5)'
     }
     return message
   }
