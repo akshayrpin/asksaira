@@ -197,8 +197,8 @@ const Chat = () => {
       content: questionContent as string,
       date: new Date().toISOString()
     }
-    let permittext = questionContent as string
 
+    let permittext = questionContent as string
     if(permittext.includes("permit")) {
       setPermitPresent('Y')
     } else {
@@ -329,6 +329,13 @@ const Chat = () => {
       role: 'user',
       content: questionContent as string,
       date: new Date().toISOString()
+    }    
+
+    let permittext = questionContent as string
+    if(permittext.includes("permit")) {
+      setPermitPresent('Y')
+    } else {
+      setPermitPresent('N')
     }
 
     let request: ConversationRequest
