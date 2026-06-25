@@ -37,6 +37,7 @@ from backend.utils import (
 )
 
 import time
+import datetime
 try:
     from backend.permit_agent import agent as permit_agent
 except Exception:  # missing aiohttp etc. -> feature simply stays off
@@ -241,7 +242,8 @@ def prepare_model_args(request_body, request_headers):
         messages = [
             {
                 "role": "system",
-                "content": app_settings.azure_openai.system_message
+                "content": f"Today's date is {datetime.date.today().isoformat()}. "
+                + app_settings.azure_openai.system_message
             }
         ]
 
@@ -290,6 +292,13 @@ def prepare_model_args(request_body, request_headers):
                 )
             ]
         }
+        # Stamp today's date into the system prompt (role_information) so the model can
+        # reason about "next / upcoming / recent / this year" instead of treating an old
+        # indexed date as current. The env-var system message stays the static base text.
+        _params = model_args["extra_body"]["data_sources"][0].get("parameters", {})
+        for _k in ("role_information", "roleInformation"):
+            if _params.get(_k):
+                _params[_k] = f"Today's date is {datetime.date.today().isoformat()}. " + _params[_k]
 
     model_args_clean = copy.deepcopy(model_args)
     if model_args_clean.get("extra_body"):
