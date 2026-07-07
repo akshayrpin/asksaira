@@ -127,6 +127,7 @@ export type UI = {
   title: string
   chat_title: string
   chat_description: string
+  chat_subtitle: string
   logo?: string
   chat_logo?: string
   show_share_button?: boolean
@@ -138,6 +139,7 @@ export type UI = {
   headertitle: string
   chat_example:string
   
+  speaker_icon?: string
   hand_wave_icon?: string
   example_logo?: string
   example_title:string
@@ -151,12 +153,15 @@ export type UI = {
   capabilities_1:string
   capabilities_2:string
   capabilities_3:string
+  capabilities_4:string
+  capabilities_5:string
 
   limitations_logo?: string
   limitations:string
   limitations_1:string
   limitations_2:string
   limitations_3:string
+  limitations_4:string
   chat_resp_logo:string
   show_permit_link?: boolean
 }

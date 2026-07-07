@@ -291,123 +291,111 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
             </Stack.Item>
           </Stack>
         )}
-        <Stack horizontal className={styles.answerFooter}>
-          {/*!!parsedAnswer?.citations.length && (
-            <Stack.Item onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? toggleIsRefAccordionOpen() : null)}>
-              <Stack style={{ width: '100%' }}>
-                <Stack horizontal horizontalAlign="start" verticalAlign="center">
-                  <Text
-                    className={styles.accordionTitle}
-                    onClick={toggleIsRefAccordionOpen}
-                    aria-label="Open references"
-                    tabIndex={0}
-                    role="button">
-                    <span>
-                      {parsedAnswer.citations.length > 1
-                        ? parsedAnswer.citations.length + ' references'
-                        : '1 reference'}
-                    </span>
-                  </Text>
-                  <FontIcon
-                    className={styles.accordionIcon}
-                    onClick={handleChevronClick}
-                    iconName={chevronIsExpanded ? 'ChevronDown' : 'ChevronRight'}
-                  />
-                </Stack>
-              </Stack>
-            </Stack.Item>
-          )*/}
-          <Stack.Item className={styles.answerDisclaimerContainer}>
-            <span className={styles.answerDisclaimer}>{ui?.chat_response_contactmessage}</span>
-          </Stack.Item>
-          <Stack.Item className={styles.answerHeader}>
-              {FEEDBACK_ENABLED && answer.message_id !== undefined && (
-                <Stack horizontal horizontalAlign="space-between">
-                  <ThumbLikeRegular
-                    aria-hidden="false"
-                    aria-label="Like this response"
-                    onClick={() => onLikeResponseClicked()}
-                    style={
-                      feedbackState === Feedback.Positive ||
-                      appStateContext?.state.feedbackState[answer.message_id] === Feedback.Positive
-                        ? { color: 'darkgreen', cursor: 'pointer' ,fontSize:'20px'}
-                        : { color: 'slategray', cursor: 'pointer' ,fontSize:'20px'}
-                    }
-                  />
-                  <ThumbDislikeRegular
-                    aria-hidden="false"
-                    aria-label="Dislike this response"
-                    onClick={() => onDislikeResponseClicked()}
-                    style={
-                      feedbackState !== Feedback.Positive &&
-                        feedbackState !== Feedback.Neutral &&
-                        feedbackState !== undefined
-                        ? { color: 'darkred', cursor: 'pointer' ,fontSize:'20px'}
-                        : { color: 'slategray', cursor: 'pointer' ,fontSize:'20px'}
-                    }
-                  />
-                </Stack>
-              )}
-            </Stack.Item>
-          {!!answer.exec_results?.length && (
-            <Stack.Item onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? toggleIsRefAccordionOpen() : null)}>
-              <Stack style={{ width: '100%' }}>
-                <Stack horizontal horizontalAlign="start" verticalAlign="center">
-                  <Text
-                    className={styles.accordionTitle}
-                    onClick={() => onExectResultClicked(answer.message_id ?? '')}
-                    aria-label="Open Intents"
-                    tabIndex={0}
-                    role="button">
-                    <span>
-                      Show Intents
-                    </span>
-                  </Text>
-                  <FontIcon
-                    className={styles.accordionIcon}
-                    onClick={handleChevronClick}
-                    iconName={'ChevronRight'}
-                  />
-                </Stack>
-              </Stack>
-            </Stack.Item>
-          )}
-        </Stack>
-        { /*chevronIsExpanded*/ (
-          <div className={styles.citationWrapper}>
-            {parsedAnswer?.citations.map((citation, idx) => {
-              if((citation.title != null && citation.title.includes("#")) || (citation.filepath != null && citation.filepath.includes("#"))) {
-                return (
-                  <a href={createCitationFilepath(citation, ++idx)}
-                    tabIndex={0}
-                    role="link"
-                    key={idx}
-                    target='_blank'
-                    className={styles.citationContainer}
-                    aria-label={createCitationFilepath(citation, idx)}>
-                    <div className={styles.citation}>{idx}</div>
-                    {createCitationFilepath(citation, idx, true)}
-                  </a>
-                )
-              } else {
-                return (
-                  <span
-                    title={createCitationFilepath(citation, ++idx)}
-                    tabIndex={0}
-                    role="link"
-                    key={idx}
-                    onClick={() => onCitationClicked(citation)}
-                    onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? onCitationClicked(citation) : null)}
-                    className={styles.citationContainer}
-                    aria-label={createCitationFilepath(citation, idx)}>
-                    <div className={styles.citation}>{idx}</div>
-                    {createCitationFilepath(citation, idx, true)}
-                  </span>
-                )
-              }  
-            })}
+        {/* Resources box: disclaimer + citation links */}
+        {((parsedAnswer?.citations?.length ?? 0) > 0 || ui?.chat_response_contactmessage) && (
+          <div className={styles.resourcesBox}>
+            <h4 className={styles.resourcesHeader}>Resources</h4>
+            {ui?.chat_response_contactmessage && (
+              <p className={styles.resourcesDisclaimer}>{ui.chat_response_contactmessage}</p>
+            )}
+            {(parsedAnswer?.citations?.length ?? 0) > 0 && (
+              <div className={styles.resourcesLinks}>
+                {parsedAnswer!.citations.map((citation, idx) => {
+                  const displayUrl =
+                    citation.url && !citation.url.includes('blob.core')
+                      ? citation.url
+                      : createCitationFilepath(citation, idx + 1)
+                  const isLink =
+                    (citation.title != null && citation.title.includes('#')) ||
+                    (citation.filepath != null && citation.filepath.includes('#')) ||
+                    (citation.url != null && !citation.url.includes('blob.core'))
+                  if (isLink) {
+                    return (
+                      <a
+                        href={displayUrl}
+                        key={idx}
+                        tabIndex={0}
+                        role="link"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.resourceLink}
+                        aria-label={displayUrl}>
+                        <div className={styles.resourceLinkNum}>{idx + 1}</div>
+                        <span className={styles.resourceLinkText}>{displayUrl}</span>
+                      </a>
+                    )
+                  } else {
+                    return (
+                      <span
+                        key={idx}
+                        tabIndex={0}
+                        role="link"
+                        onClick={() => onCitationClicked(citation)}
+                        onKeyDown={e =>
+                          e.key === 'Enter' || e.key === ' ' ? onCitationClicked(citation) : null
+                        }
+                        className={styles.resourceLink}
+                        aria-label={createCitationFilepath(citation, idx + 1, true)}>
+                        <div className={styles.resourceLinkNum}>{idx + 1}</div>
+                        <span className={styles.resourceLinkText}>
+                          {createCitationFilepath(citation, idx + 1, true)}
+                        </span>
+                      </span>
+                    )
+                  }
+                })}
+              </div>
+            )}
           </div>
         )}
+
+        {/* Feedback icons */}
+        <div className={styles.feedbackRow}>
+          {FEEDBACK_ENABLED && answer.message_id !== undefined && (
+            <Stack horizontal horizontalAlign="start" tokens={{ childrenGap: 8 }}>
+              <ThumbLikeRegular
+                aria-hidden="false"
+                aria-label="Like this response"
+                onClick={() => onLikeResponseClicked()}
+                style={
+                  feedbackState === Feedback.Positive ||
+                  appStateContext?.state.feedbackState[answer.message_id] === Feedback.Positive
+                    ? { color: 'darkgreen', cursor: 'pointer', fontSize: '20px' }
+                    : { color: 'slategray', cursor: 'pointer', fontSize: '20px' }
+                }
+              />
+              <ThumbDislikeRegular
+                aria-hidden="false"
+                aria-label="Dislike this response"
+                onClick={() => onDislikeResponseClicked()}
+                style={
+                  feedbackState !== Feedback.Positive &&
+                  feedbackState !== Feedback.Neutral &&
+                  feedbackState !== undefined
+                    ? { color: 'darkred', cursor: 'pointer', fontSize: '20px' }
+                    : { color: 'slategray', cursor: 'pointer', fontSize: '20px' }
+                }
+              />
+            </Stack>
+          )}
+          {!!answer.exec_results?.length && (
+            <Stack horizontal horizontalAlign="start" verticalAlign="center">
+              <Text
+                className={styles.accordionTitle}
+                onClick={() => onExectResultClicked(answer.message_id ?? '')}
+                aria-label="Open Intents"
+                tabIndex={0}
+                role="button">
+                <span>Show Intents</span>
+              </Text>
+              <FontIcon
+                className={styles.accordionIcon}
+                onClick={handleChevronClick}
+                iconName={'ChevronRight'}
+              />
+            </Stack>
+          )}
+        </div>
       </Stack>
       <Dialog
         onDismiss={() => {
