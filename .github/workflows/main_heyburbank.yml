@@ -7,7 +7,7 @@ name: Build and deploy Python app to Azure Web App - heyburbank
 on:
   push:
     branches:
-      - main
+      - burbank
   workflow_dispatch:
 
 jobs:
