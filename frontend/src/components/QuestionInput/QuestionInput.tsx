@@ -2,8 +2,6 @@ import { useContext, useState } from 'react'
 import { FontIcon, Stack, TextField } from '@fluentui/react'
 import { SendRegular } from '@fluentui/react-icons'
 
-import Send from '../../assets/Send.svg'
-
 import styles from './QuestionInput.module.css'
 import { ChatMessage } from '../../api'
 import { AppStateContext } from '../../state/AppProvider'
@@ -22,6 +20,7 @@ interface Props {
 export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conversationId,questionInputTop }: Props) => {
   const [question, setQuestion] = useState<string>('')
   const [base64Image, setBase64Image] = useState<string | null>(null);
+  const isHeroInput = questionInputTop === 'Y'
 
   const appStateContext = useContext(AppStateContext)
   const OYD_ENABLED = appStateContext?.state.frontendSettings?.oyd_enabled || false;
@@ -88,7 +87,7 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
         onChange={onQuestionChange}
         onKeyDown={onEnterPress}
       />
-      {!OYD_ENABLED && (
+      {!OYD_ENABLED && !isHeroInput && (
         <div className={styles.fileInputContainer}>
           <input
             type="file"

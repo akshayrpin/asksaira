@@ -1,36 +1,40 @@
 .questionInputContainerTop{
-  box-shadow: 0 8px 16px #00000024,0 0 2px #0000001f;
-  border-radius: 8px;
+  box-shadow: none;
+  border: 1px solid #d6dbe3;
+  border-radius: 10px;
   width: 100%;
   align-items: center;
+  background: #ffffff;
+  position: relative;
+  min-height: 66px;
 }
 .questionInputContainerTop div {
   background: none;
 }
 .questionInputContainerTop textarea,.questionInputContainer textarea{
-  height: 20px;
-  padding: 20px;
+  height: 24px;
+  padding: 18px 64px 18px 20px;
+  font-size: 15px;
+  color: #334155;
 }
 
 .questionInputContainer {
-  height: 70px;
-  position: absolute;
-  left: 6.5%;
-  right: 0%;
-  top: 0%;
-  bottom: 0%;
+  min-height: 66px;
+  position: relative;
+  width: 100%;
   background: #ffffff;
   box-shadow:
     0px 8px 16px rgba(0, 0, 0, 0.14),
     0px 0px 2px rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
+  border: 1px solid #d6dbe3;
+  border-radius: 10px;
   align-items: center;
 }
 
 .questionInputTextArea {
   width: 100%;
   line-height: 40px;
-  flex: 0 95%;
+  flex: 1 1 auto;
   /* margin-top: 10px;
   margin-bottom: 10px;
   margin-left: 12px;
@@ -38,28 +42,32 @@
 }
 
 .questionInputSendButtonContainer {
-  background: #2a7882 !important;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: linear-gradient(180deg, #4ea6d9 0%, #1f7fba 100%) !important;
   color: #fff;
-  width: 46px;
-  height: 28px;
-  border-radius: 15px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   display: flex;
   justify-content: center;
+  align-items: center;
   background: #2a7882;
+  box-shadow: 0 8px 16px rgba(18, 107, 167, 0.24);
 }
 
 .questionInputSendButton {
-  width: 29px;
-  height: 23px;
-  transform: rotate(-50deg);
+  width: 20px;
+  height: 20px;
 }
 
 .questionInputSendButtonDisabled {
-  width: 29px;
-  height: 23px;
+  width: 20px;
+  height: 20px;
   background: none;
   color: #f9f5f5;
-  transform: rotate(-50deg);
 }
 
 .questionInputBottomBorder {
@@ -80,15 +88,17 @@
 }
 
 @media (max-width: 480px) {
-  .questionInputContainer {
-    left: 16.5%;
+  .questionInputContainerTop textarea,
+  .questionInputContainer textarea {
+    padding-right: 58px;
   }
 }
 
 .fileInputContainer {
   position: absolute;
-  right: 24px;
-  top: 20px;
+  right: 62px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .fileInput {
