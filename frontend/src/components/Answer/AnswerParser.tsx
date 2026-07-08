@@ -31,16 +31,31 @@ export function parseAnswer(answer: AskResponse): ParsedAnswer {
 
   let filteredCitations = [] as Citation[]
   let citationReindex = 0
+  // Two different [docN] chunks can point at the SAME source URL (e.g. an ordinance split
+  // into chunks), which otherwise renders the same link twice. Track URL -> reference number
+  // so repeats collapse onto one reference instead of showing a duplicate. (CB-0015)
+  const sourceToReindex = new Map<string, string>()
   citationLinks?.forEach(link => {
     // Replacing the links/citations with number
     const citationIndex = link.slice(lengthDocN, link.length - 1)
     const citation = cloneDeep(answer.citations[Number(citationIndex) - 1]) as Citation
-    if (!filteredCitations.find(c => c.id === citationIndex) && citation) {
-      answerText = answerText.replaceAll(link, ` ^${++citationReindex}^ `)
-      citation.id = citationIndex // original doc index to de-dupe
-      citation.reindex_id = citationReindex.toString() // reindex from 1 for display
-      filteredCitations.push(citation)
+    if (!citation) return
+    // Same doc index already handled (its links were replaced) -> nothing to do.
+    if (filteredCitations.find(c => c.id === citationIndex)) return
+    // Key on URL ONLY: same URL = a genuine duplicate link. Do NOT fall back to filepath,
+    // or legitimate multi-part chunks of one file (shown as "Part 1 / Part 2") would collapse.
+    const sourceKey = citation.url || ''
+    const existingReindex = sourceKey ? sourceToReindex.get(sourceKey) : undefined
+    if (existingReindex) {
+      // Already have a reference for this source: point this link at it, add no new entry.
+      answerText = answerText.replaceAll(link, ` ^${existingReindex}^ `)
+      return
     }
+    answerText = answerText.replaceAll(link, ` ^${++citationReindex}^ `)
+    citation.id = citationIndex // original doc index to de-dupe
+    citation.reindex_id = citationReindex.toString() // reindex from 1 for display
+    if (sourceKey) sourceToReindex.set(sourceKey, citation.reindex_id)
+    filteredCitations.push(citation)
   })
 
   filteredCitations = enumerateCitations(filteredCitations)

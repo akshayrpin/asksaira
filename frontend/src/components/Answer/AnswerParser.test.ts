@@ -54,3 +54,51 @@ describe('enumerateCitations', () => {
     expect(results[2].part_index).toEqual(1)
   })
 })
+
+const makeCitation = (id: string, url: string | null, filepath: string): Citation => ({
+  id,
+  filepath,
+  part_index: undefined,
+  content: '',
+  title: null,
+  url,
+  metadata: null,
+  chunk_id: null,
+  reindex_id: null
+})
+
+describe('parseAnswer URL de-duplication (CB-0015)', () => {
+  it('collapses two citations that share the same URL into one reference', () => {
+    const answer: AskResponse = {
+      answer: 'See the ordinance [doc1] and also [doc2].',
+      citations: [makeCitation('doc1', 'https://burbank/ord-26-4038', 'ord.pdf'), makeCitation('doc2', 'https://burbank/ord-26-4038', 'ord.pdf')],
+      generated_chart: null
+    }
+    const parsed = parseAnswer(answer) as NonNullable<ParsedAnswer>
+    expect(parsed.citations).toHaveLength(1)
+    expect(parsed.markdownFormatText).toContain('^1^')
+    expect(parsed.markdownFormatText).not.toContain('^2^')
+  })
+
+  it('keeps distinct URLs as separate references', () => {
+    const answer: AskResponse = {
+      answer: 'First [doc1] then [doc2].',
+      citations: [makeCitation('doc1', 'https://burbank/a', 'a.pdf'), makeCitation('doc2', 'https://burbank/b', 'b.pdf')],
+      generated_chart: null
+    }
+    const parsed = parseAnswer(answer) as NonNullable<ParsedAnswer>
+    expect(parsed.citations).toHaveLength(2)
+    expect(parsed.markdownFormatText).toContain('^1^')
+    expect(parsed.markdownFormatText).toContain('^2^')
+  })
+
+  it('does not collapse same-file chunks when URL is null (multi-part refs preserved)', () => {
+    const answer: AskResponse = {
+      answer: 'Part one [doc1] and part two [doc2].',
+      citations: [makeCitation('doc1', null, 'file1.pdf'), makeCitation('doc2', null, 'file1.pdf')],
+      generated_chart: null
+    }
+    const parsed = parseAnswer(answer) as NonNullable<ParsedAnswer>
+    expect(parsed.citations).toHaveLength(2)
+  })
+})
