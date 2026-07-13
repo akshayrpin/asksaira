@@ -2,6 +2,12 @@
   box-sizing: border-box;
 }
 
+:root {
+  --font-gotham-book: 'Gotham Book', 'Gotham-Book', 'Gotham', 'Segoe UI', sans-serif;
+  --font-gotham-regular: 'Gotham', 'Gotham Regular', 'Segoe UI', sans-serif;
+  --font-gotham-bold: 'Gotham Bold', 'Gotham-Bold', 'Gotham', 'Segoe UI', sans-serif;
+}
+
 html,
 body {
   height: 100%;
@@ -11,15 +17,7 @@ body {
 
 html {
   background: #f2f2f2;
-  font-family:
-    'Segoe UI',
-    'Segoe UI Web (West European)',
-    'Segoe UI',
-    -apple-system,
-    BlinkMacSystemFont,
-    Roboto,
-    'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-gotham-regular);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

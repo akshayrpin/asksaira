@@ -76,16 +76,16 @@ const Layout = () => {
   return (
     
     <div className={styles.layout}>
-      <header className={styles.header} role={'banner'}>
+      {/* <header className={styles.header} role={'banner'}>
         <Stack horizontal verticalAlign="center" horizontalAlign="space-between">
           <Stack horizontal verticalAlign="center">
             {/*<img src={logo} className={styles.headerIcon} aria-hidden="true" alt="" />&nbsp;*/}
-            <h1>{ui?.headertitle}</h1>
+            {/* <h1>{ui?.headertitle}</h1> */}
             {/*<Link to="https://www.sairasolutions.com/" target="_blank" className={styles.headerTitleContainer}>
               <h1 className={styles.powered}>{ui?.poweredby}</h1>&nbsp;
               <h1 className={styles.poweredbycomp}>{ui?.poweredbycomp}</h1>
             </Link>*/}
-          </Stack>
+          {/* </Stack> */}
           {/*<Stack horizontal tokens={{ childrenGap: 4 }} className={styles.shareButtonContainer}>
             {appStateContext?.state.isCosmosDBAvailable?.status !== CosmosDBStatus.NotConfigured && ui?.show_chat_history_button !== false && (
               <HistoryButton
@@ -102,8 +102,8 @@ const Layout = () => {
             </Link>
           </Stack>
           )}*/}
-        </Stack>
-      </header>
+        {/* </Stack> */}
+      {/* </div></header> */}
       <Outlet />
       <Dialog
         onDismiss={handleSharePanelDismiss}

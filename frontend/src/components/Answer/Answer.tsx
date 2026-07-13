@@ -38,6 +38,29 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
   const filePathTruncationLimit = 50
 
   const parsedAnswer = useMemo(() => parseAnswer(answer), [answer])
+  const splitMarkdownBySummary = (markdown: string) => {
+    if (!markdown) {
+      return { main: '', summary: '' }
+    }
+
+    // Split at a line-level Summary heading (plain text or markdown heading forms).
+    const summaryHeadingRegex = /^(\s{0,3}(?:#{1,6}\s*)?summary\b.*)$/im
+    const match = summaryHeadingRegex.exec(markdown)
+
+    if (!match || match.index < 0) {
+      return { main: markdown, summary: '' }
+    }
+
+    return {
+      main: markdown.slice(0, match.index).trim(),
+      summary: markdown.slice(match.index).trim()
+    }
+  }
+  const markdownSections = useMemo(
+    () => splitMarkdownBySummary(parsedAnswer?.markdownFormatText ?? ''),
+    [parsedAnswer?.markdownFormatText]
+  )
+  const summarySectionContent = markdownSections.summary
   const [chevronIsExpanded, setChevronIsExpanded] = useState(isRefAccordionOpen)
   const [feedbackState, setFeedbackState] = useState(initializeAnswerFeedback(answer))
   const [isFeedbackDialogOpen, setIsFeedbackDialogOpen] = useState(false)
@@ -266,24 +289,28 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
   return (
     <>
       <Stack className={styles.answerContainer} tabIndex={0}>
-       
-        <Stack.Item>
-          <Stack horizontal grow>
-            <Stack.Item grow>
-              {parsedAnswer && <ReactMarkdown
-                linkTarget="_blank"
-                remarkPlugins={[remarkGfm, supersub]}
-                children={
-                  SANITIZE_ANSWER
-                    ? DOMPurify.sanitize(parsedAnswer?.markdownFormatText, { ALLOWED_TAGS: XSSAllowTags, ALLOWED_ATTR: XSSAllowAttributes })
-                    : parsedAnswer?.markdownFormatText
-                }
-                className={styles.answerText}
-                components={components}
-              />}
-            </Stack.Item>
-          </Stack>
-        </Stack.Item>
+        {!!markdownSections.main && (
+          <Stack.Item>
+            <Stack horizontal grow>
+              <Stack.Item grow>
+                <ReactMarkdown
+                  linkTarget="_blank"
+                  remarkPlugins={[remarkGfm, supersub]}
+                  children={
+                    SANITIZE_ANSWER
+                      ? DOMPurify.sanitize(markdownSections.main, {
+                        ALLOWED_TAGS: XSSAllowTags,
+                        ALLOWED_ATTR: XSSAllowAttributes
+                      })
+                      : markdownSections.main
+                  }
+                  className={styles.answerText}
+                  components={components}
+                />
+              </Stack.Item>
+            </Stack>
+          </Stack.Item>
+        )}
         {parsedAnswer?.generated_chart !== null && (
           <Stack className={styles.answerContainer}>
             <Stack.Item grow>
@@ -291,61 +318,78 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
             </Stack.Item>
           </Stack>
         )}
-        {/* Resources box: disclaimer + citation links */}
-        {((parsedAnswer?.citations?.length ?? 0) > 0 || ui?.chat_response_contactmessage) && (
-          <div className={styles.resourcesBox}>
-            <h4 className={styles.resourcesHeader}>Resources</h4>
-            {ui?.chat_response_contactmessage && (
-              <p className={styles.resourcesDisclaimer}>{ui.chat_response_contactmessage}</p>
+        {(!!summarySectionContent || (parsedAnswer?.citations?.length ?? 0) > 0 || ui?.chat_response_contactmessage) && (
+          <div className={styles.summaryResourcesBox}>
+            {!!summarySectionContent && (
+              <ReactMarkdown
+                linkTarget="_blank"
+                remarkPlugins={[remarkGfm, supersub]}
+                children={
+                  SANITIZE_ANSWER
+                    ? DOMPurify.sanitize(summarySectionContent, {
+                      ALLOWED_TAGS: XSSAllowTags,
+                      ALLOWED_ATTR: XSSAllowAttributes
+                    })
+                    : summarySectionContent
+                }
+                className={styles.answerText}
+                components={components}
+              />
             )}
-            {(parsedAnswer?.citations?.length ?? 0) > 0 && (
-              <div className={styles.resourcesLinks}>
-                {parsedAnswer!.citations.map((citation, idx) => {
-                  const displayUrl =
-                    citation.url && !citation.url.includes('blob.core')
-                      ? citation.url
-                      : createCitationFilepath(citation, idx + 1)
-                  const isLink =
-                    (citation.title != null && citation.title.includes('#')) ||
-                    (citation.filepath != null && citation.filepath.includes('#')) ||
-                    (citation.url != null && !citation.url.includes('blob.core'))
-                  if (isLink) {
-                    return (
-                      <a
-                        href={displayUrl}
-                        key={idx}
-                        tabIndex={0}
-                        role="link"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles.resourceLink}
-                        aria-label={displayUrl}>
-                        <div className={styles.resourceLinkNum}>{idx + 1}</div>
-                        <span className={styles.resourceLinkText}>{displayUrl}</span>
-                      </a>
-                    )
-                  } else {
-                    return (
-                      <span
-                        key={idx}
-                        tabIndex={0}
-                        role="link"
-                        onClick={() => onCitationClicked(citation)}
-                        onKeyDown={e =>
-                          e.key === 'Enter' || e.key === ' ' ? onCitationClicked(citation) : null
-                        }
-                        className={styles.resourceLink}
-                        aria-label={createCitationFilepath(citation, idx + 1, true)}>
-                        <div className={styles.resourceLinkNum}>{idx + 1}</div>
-                        <span className={styles.resourceLinkText}>
-                          {createCitationFilepath(citation, idx + 1, true)}
+            <div className={styles.resourcesBox}>
+              <h4 className={styles.resourcesHeader}>Resources</h4>
+              {ui?.chat_response_contactmessage && (
+                <p className={styles.resourcesDisclaimer}>{ui.chat_response_contactmessage}</p>
+              )}
+              {(parsedAnswer?.citations?.length ?? 0) > 0 && (
+                <div className={styles.resourcesLinks}>
+                  {parsedAnswer!.citations.map((citation, idx) => {
+                    const displayUrl =
+                      citation.url && !citation.url.includes('blob.core')
+                        ? citation.url
+                        : createCitationFilepath(citation, idx + 1)
+                    const isLink =
+                      (citation.title != null && citation.title.includes('#')) ||
+                      (citation.filepath != null && citation.filepath.includes('#')) ||
+                      (citation.url != null && !citation.url.includes('blob.core'))
+                    if (isLink) {
+                      return (
+                        <a
+                          href={displayUrl}
+                          key={idx}
+                          tabIndex={0}
+                          role="link"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={styles.resourceLink}
+                          aria-label={displayUrl}>
+                          <div className={styles.resourceLinkNum}>{idx + 1}</div>
+                          <span className={styles.resourceLinkText}>{displayUrl}</span>
+                        </a>
+                      )
+                    } else {
+                      return (
+                        <span
+                          key={idx}
+                          tabIndex={0}
+                          role="link"
+                          onClick={() => onCitationClicked(citation)}
+                          onKeyDown={e =>
+                            e.key === 'Enter' || e.key === ' ' ? onCitationClicked(citation) : null
+                          }
+                          className={styles.resourceLink}
+                          aria-label={createCitationFilepath(citation, idx + 1, true)}>
+                          <div className={styles.resourceLinkNum}>{idx + 1}</div>
+                          <span className={styles.resourceLinkText}>
+                            {createCitationFilepath(citation, idx + 1, true)}
+                          </span>
                         </span>
-                      </span>
-                    )
-                  }
-                })}
-              </div>
-            )}
+                      )
+                    }
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
