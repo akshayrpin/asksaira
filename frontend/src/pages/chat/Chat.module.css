@@ -636,7 +636,7 @@ a {
 .landingSubtitle {
   margin: 12px auto 0;
   max-width: 780px;
-  font-family: var(--font-gotham-regular);
+  font-family: var(--font-gotham-medium);
   font-size: 16px;
   line-height: 1.5;
   font-weight: 400;

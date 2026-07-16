@@ -878,7 +878,7 @@ const Chat = () => {
                     </span>
                     <span className={styles.landingBrandText}>{ui?.headertitle}</span>
                   </div>
-                  <h1 className={styles.landingTitle}>Hi there <img src={ui?.hand_wave_icon} alt="Icon" className={styles.aiWaveIcon}/>  {ui?.chat_description}</h1>
+                  <h2 className={styles.landingTitle}>Hi there <img src={ui?.hand_wave_icon} alt="Icon" className={styles.aiWaveIcon}/>  {ui?.chat_description}</h2>
                   <p className={styles.landingSubtitle}>{ui?.chat_subtitle}</p>
 
                   <div className={styles.landingInputWrap}>
@@ -894,7 +894,7 @@ const Chat = () => {
                     />
                   </div>
 
-                  <h2 className={styles.sectionHeading}>{ui?.example_title}</h2>
+                  <h3 className={styles.sectionHeading}>{ui?.example_title}</h3>
                   <div className={styles.questionGrid}>
                     {commonQuestions.map(question => (
                       <button

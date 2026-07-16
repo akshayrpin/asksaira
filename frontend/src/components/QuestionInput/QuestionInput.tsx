@@ -1,8 +1,8 @@
 import { useContext, useState } from 'react'
 import { FontIcon, Stack, TextField } from '@fluentui/react'
-import { SendRegular } from '@fluentui/react-icons'
 
 import styles from './QuestionInput.module.css'
+import SearchButton from '../../assets/search-button.svg'
 import { ChatMessage } from '../../api'
 import { AppStateContext } from '../../state/AppProvider'
 import { resizeImage } from '../../utils/resizeImage'
@@ -113,10 +113,9 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
         onClick={sendQuestion}
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? sendQuestion() : null)}>
         {sendQuestionDisabled ? (
-          <SendRegular className={styles.questionInputSendButtonDisabled} />
+          <img src={SearchButton} className={styles.questionInputSendButtonDisabled} alt="Search" />
         ) : (
-          // <img src={Send} className={styles.questionInputSendButton} alt="Send Button" />
-          <SendRegular className={styles.questionInputSendButton} />
+          <img src={SearchButton} className={styles.questionInputSendButton} alt="Search" />
         )}
       </div>
       {/* <div className={styles.questionInputBottomBorder} /> */}

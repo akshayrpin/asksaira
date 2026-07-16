@@ -21,6 +21,30 @@
   box-sizing: border-box;
 }
 
+.summarySection {
+  margin: 0;
+}
+
+.summarySection .answerText h1,
+.summarySection .answerText h2,
+.summarySection .answerText h3,
+.summarySection .answerText h4 {
+  margin: 0 0 6px 0;
+  font-family: var(--font-gotham-book);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #323130;
+}
+
+.summarySection .answerText p > strong:first-child {
+  font-family: var(--font-gotham-book);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #323130;
+}
+
 .answerText {
   font-family: var(--font-gotham-regular);
   font-weight: 400;
@@ -310,19 +334,21 @@
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  min-width: 18px;
-  height: 18px;
-  border: 1px solid #c7d0da;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
   color: #fff;
-  background: #3b7595;
+  background: #3f6f93;
   flex-shrink: 0;
 }
 
 .resourceLinkText {
   color: #115ea3;
+  text-decoration: underline;
 }
 
 .feedbackRow {

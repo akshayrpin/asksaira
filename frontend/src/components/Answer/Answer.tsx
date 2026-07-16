@@ -43,8 +43,10 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
       return { main: '', summary: '' }
     }
 
-    // Split at a line-level Summary heading (plain text or markdown heading forms).
-    const summaryHeadingRegex = /^(\s{0,3}(?:#{1,6}\s*)?summary\b.*)$/im
+    // Split at a line-level Summary marker, including plain, markdown heading,
+    // markdown bold (**Summary**) and raw HTML strong (<strong>Summary</strong>) forms.
+    const summaryHeadingRegex =
+      /^(\s{0,3}(?:#{1,6}\s*)?(?:(?:\*\*|__)\s*)?(?:<strong>\s*)?summary\b[^\n]*(?:\s*<\/strong>)?(?:\s*(?:\*\*|__))?\s*)$/im
     const match = summaryHeadingRegex.exec(markdown)
 
     if (!match || match.index < 0) {
@@ -321,20 +323,22 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
         {(!!summarySectionContent || (parsedAnswer?.citations?.length ?? 0) > 0 || ui?.chat_response_contactmessage) && (
           <div className={styles.summaryResourcesBox}>
             {!!summarySectionContent && (
-              <ReactMarkdown
-                linkTarget="_blank"
-                remarkPlugins={[remarkGfm, supersub]}
-                children={
-                  SANITIZE_ANSWER
-                    ? DOMPurify.sanitize(summarySectionContent, {
-                      ALLOWED_TAGS: XSSAllowTags,
-                      ALLOWED_ATTR: XSSAllowAttributes
-                    })
-                    : summarySectionContent
-                }
-                className={styles.answerText}
-                components={components}
-              />
+              <div className={styles.summarySection}>
+                <ReactMarkdown
+                  linkTarget="_blank"
+                  remarkPlugins={[remarkGfm, supersub]}
+                  children={
+                    SANITIZE_ANSWER
+                      ? DOMPurify.sanitize(summarySectionContent, {
+                        ALLOWED_TAGS: XSSAllowTags,
+                        ALLOWED_ATTR: XSSAllowAttributes
+                      })
+                      : summarySectionContent
+                  }
+                  className={styles.answerText}
+                  components={components}
+                />
+              </div>
             )}
             <div className={styles.resourcesBox}>
               <h4 className={styles.resourcesHeader}>Resources</h4>

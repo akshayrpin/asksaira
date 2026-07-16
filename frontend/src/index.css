@@ -4,6 +4,7 @@
 
 :root {
   --font-gotham-book: 'Gotham Book', 'Gotham-Book', 'Gotham', 'Segoe UI', sans-serif;
+  --font-gotham-medium: 'Gotham Medium', 'Gotham-Medium', 'Gotham', 'Segoe UI', sans-serif;
   --font-gotham-regular: 'Gotham', 'Gotham Regular', 'Segoe UI', sans-serif;
   --font-gotham-bold: 'Gotham Bold', 'Gotham-Bold', 'Gotham', 'Segoe UI', sans-serif;
 }
