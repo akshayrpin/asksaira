@@ -20,6 +20,12 @@ from backend.permit_agent import permit_client as pc
 
 MAX_STEPS = 6
 
+# The "older permits portal" note applies to construction/activity permits only, NOT to business
+# tax or code enforcement (those live in other modules). ePALS only holds records from ~2006 on.
+NON_PERMIT_MODULES = {"BUSINESS TAX", "BUSINESS LICENSE", "CODE ENFORCEMENT"}
+OLDER_PERMITS_NOTE = ("\n\nFor permits older than 2006, view them in the City's permit portal: "
+                      "https://permit.burbankca.gov/pi/")
+
 SYSTEM = """You are the City of Burbank permits assistant. You answer questions about EXISTING permit records: how many, lists, and single-permit lookups. You are read-only and only report what the tools return. Never invent a number, type, status, or permit.
 
 Today is {today}.
@@ -162,6 +168,7 @@ async def answer_permit_query(user_query, client, model, history=None):
             {"role": "system", "content": _system_prompt()},
             {"role": "user", "content": user_query},
         ]
+    modules_used = set()  # module filters the agent used, to scope the older-permits note
     for _ in range(MAX_STEPS):
         resp = await client.chat.completions.create(
             model=model, messages=messages, tools=TOOLS, temperature=0,
@@ -169,10 +176,16 @@ async def answer_permit_query(user_query, client, model, history=None):
         msg = resp.choices[0].message
         messages.append(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
-            return msg.content or "I couldn't find that in the permit records."
+            answer = msg.content or "I couldn't find that in the permit records."
+            concrete = {m for m in modules_used if m}
+            # Append the note for permit-record answers; skip it for business tax / code enforcement.
+            if not (concrete and concrete <= NON_PERMIT_MODULES):
+                answer += OLDER_PERMITS_NOTE
+            return answer
         for tc in msg.tool_calls:
             try:
                 args = json.loads(tc.function.arguments or "{}")
+                modules_used.add(args.get("module"))
                 result = await _dispatch(tc.function.name, args)
             except Exception as e:
                 logging.exception("permit tool failed: %s", tc.function.name)
