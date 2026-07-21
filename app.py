@@ -43,6 +43,11 @@ try:
 except Exception:  # missing aiohttp etc. -> feature simply stays off
     permit_agent = None
     logging.exception("permit agent unavailable; permit questions fall back to RAG")
+try:
+    from backend import meetings as meetings_feed
+except Exception:  # missing deps -> live meeting lookup stays off
+    meetings_feed = None
+    logging.exception("meetings feed unavailable; meeting questions fall back to RAG")
 
 bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
 
@@ -496,6 +501,29 @@ async def try_permit_answer(request_body):
         return None
 
 
+# Live meeting-schedule lookup (Burbank-specific: only active when its Granicus feed URL is set).
+MEETINGS_ENABLED = bool(meetings_feed) and bool(os.environ.get("MEETINGS_FEED_URL"))
+
+
+async def try_meetings_answer(request_body):
+    """Answer 'when is the next <body> meeting' from the live Granicus feed. Returns the answer
+    string, or None to fall through to RAG. Off unless MEETINGS_FEED_URL is set."""
+    if not MEETINGS_ENABLED:
+        return None
+    messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
+    user_query = _latest_user_query(messages)
+    if not user_query or not meetings_feed.is_meeting_query(user_query):
+        return None
+    try:
+        answer = await meetings_feed.answer_meeting_query(user_query, datetime.date.today())
+        if answer:
+            logging.info("[MEETINGS FEED] handled: %s", user_query)
+        return answer
+    except Exception:
+        logging.exception("meetings feed failed; falling back to RAG")
+        return None
+
+
 def _permit_message_obj():
     return {
         "id": "permit-agent",
@@ -576,6 +604,9 @@ async def complete_chat_request(request_body, request_headers):
         permit_answer = await try_permit_answer(request_body)
         if permit_answer is not None:
             return permit_non_streaming_response(permit_answer, history_metadata)
+        meetings_answer = await try_meetings_answer(request_body)
+        if meetings_answer is not None:
+            return permit_non_streaming_response(meetings_answer, history_metadata)
         response, apim_request_id = await send_chat_request(request_body, request_headers)
         return format_non_streaming_response(response, history_metadata, apim_request_id)
 
@@ -585,6 +616,9 @@ async def stream_chat_request(request_body, request_headers):
     permit_answer = await try_permit_answer(request_body)
     if permit_answer is not None:
         return permit_stream_response(permit_answer, history_metadata)
+    meetings_answer = await try_meetings_answer(request_body)
+    if meetings_answer is not None:
+        return permit_stream_response(meetings_answer, history_metadata)
     response, apim_request_id = await send_chat_request(request_body, request_headers)
     
     async def generate():
