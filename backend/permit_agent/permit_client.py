@@ -50,6 +50,12 @@ CODE_ENFORCEMENT_FIELDS = ["act_nbr", "status", "type", "address", "applied_date
 # confirmed. Do NOT use a personal address such as aceniceros@.
 CODE_ENFORCEMENT_CONTACT = "For more information, contact Burbank Code Enforcement at (818) 238-5225."
 
+# BUSINESS TAX: an account renews yearly, so ONE business has many records over time. Counting
+# every record over-counts massively (raw numFound ~230k). "How many businesses are in the city"
+# means the currently-active accounts = these two statuses (verified ~11,538; Exempt excluded per
+# the city). "New businesses in a year" = accounts first created that year with renewal:"NO".
+ACTIVE_BUSINESS_STATUSES = ["Paid / Current", "Pending Renewal"]
+
 # Fields a user actually cares about, kept small so tool results stay cheap.
 _SUMMARY = ["act_nbr", "type", "status", "department", "address",
             "applied_date", "valuation_calculated", "description"]
@@ -121,13 +127,18 @@ def _solr_dt(d, end=False):
 
 
 def _fqs(type=None, status=None, department=None, module=None, address=None,
-         date_field="applied", date_from=None, date_to=None):
+         date_field="applied", date_from=None, date_to=None, renewal=None):
     """Build the list of ('fq', clause) tuples for the given filters."""
     out = []
     if type:
         out.append(("fq", f'type:"{type}"'))
-    if status:
-        out.append(("fq", f'status:"{status}"'))
+    if status:                       # str -> one status; list/tuple -> OR-match several
+        if isinstance(status, (list, tuple)):
+            out.append(("fq", "status:(" + " OR ".join(f'"{s}"' for s in status) + ")"))
+        else:
+            out.append(("fq", f'status:"{status}"'))
+    if renewal:                      # BUSINESS TAX: "NO" = new account, "YES" = renewal
+        out.append(("fq", f'renewal:"{renewal}"'))
     if department:
         out.append(("fq", f'department:"{department}"'))
     if module:
