@@ -27,7 +27,9 @@ Today is {today}.
 How to work:
 - When the user names a kind of permit in words (e.g. "solar", "ADU", "pool", "electrical"), call find_permit_type FIRST to get the exact stored type value, then use that exact value in count_permits / search_permits. If find_permit_type returns nothing, tell the user you couldn't find that permit type and ask them to rephrase; do NOT guess a type.
 - "how many ..." -> count_permits. "show / list / which permits ..." or anything tied to an address -> search_permits. A specific permit number (like BS2504744) -> get_permit.
-- Business questions use the module filter, NOT find_permit_type (a business isn't a single permit type). For "new businesses" / "businesses opened" / "business tax", use module="BUSINESS TAX". For "business license(s)", use module="BUSINESS LICENSE". "Opened/registered" means when the business-tax account was created (use date_field "created").
+- Business questions use the module filter, NOT find_permit_type (a business isn't a single permit type). Use module="BUSINESS TAX" for business tax, module="BUSINESS LICENSE" for business licenses.
+- "How many businesses are in the city" (total / current businesses): count_permits(module="BUSINESS TAX", business_active=true). This counts ONLY currently-active accounts. NEVER count all BUSINESS TAX records: each business renews yearly, so the raw total (~230k) massively over-counts.
+- "How many new businesses opened/registered in <year>": count_permits(module="BUSINESS TAX", date_field="created", date_from and date_to set to that year, renewal="NO").
 - Dates: default date_field is "applied" (filed/submitted). Use "issued" for issued/approved, "final" for completed/finaled. For "this month" use {month_start} to {month_end}; for "this year" use {year}-01-01 to {year}-12-31. Pass dates as YYYY-MM-DD.
 - search_permits returns up to 12 records plus the true total. When you list them, show those (address, type, status, date) and then state the total, e.g. "Showing 12 of 47 permits at that address."
 - Use group_by on count_permits when the user wants a breakdown (by status, type, or department).
@@ -66,6 +68,10 @@ TOOLS = [
                     "date_from": {"type": "string", "description": "YYYY-MM-DD / YYYY-MM / YYYY"},
                     "date_to": {"type": "string", "description": "YYYY-MM-DD / YYYY-MM / YYYY"},
                     "group_by": {"type": "string", "enum": ["status", "type", "department"]},
+                    "renewal": {"type": "string", "enum": ["NO", "YES"],
+                                "description": "BUSINESS TAX only: 'NO' = new/original account, 'YES' = a renewal"},
+                    "business_active": {"type": "boolean",
+                                        "description": "BUSINESS TAX only: true = count ONLY currently-active businesses (Paid/Current or Pending Renewal). Use for 'how many businesses are in the city'."},
                 },
             },
         },
@@ -110,11 +116,13 @@ async def _dispatch(name, args):
     if name == "find_permit_type":
         return {"matches": await pc.find_permit_type(args.get("keyword", ""))}
     if name == "count_permits":
+        status = pc.ACTIVE_BUSINESS_STATUSES if args.get("business_active") else args.get("status")
         return await pc.count(
-            type=args.get("type"), status=args.get("status"), department=args.get("department"),
+            type=args.get("type"), status=status, department=args.get("department"),
             module=args.get("module"), address=args.get("address"),
             date_field=args.get("date_field", "applied"),
             date_from=args.get("date_from"), date_to=args.get("date_to"),
+            renewal=args.get("renewal"),
             group_by=args.get("group_by"),
         )
     if name == "search_permits":
