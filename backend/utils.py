@@ -8,8 +8,10 @@ import dataclasses
 from typing import List
 
 # Contact emails the bot must never surface in an answer, even if a retrieved
-# document contains them. Add more addresses here as needed.
+# document contains them. Each blocked address is replaced with REPLACEMENT_EMAIL
+# so the answer keeps a valid contact instead of a dangling "Email:" label.
 BLOCKED_EMAILS = ["cdd-license@burbankca.gov"]
+REPLACEMENT_EMAIL = "license@burbankca.gov"
 _BLOCKED_RE = (
     re.compile("|".join(re.escape(e) for e in BLOCKED_EMAILS), re.IGNORECASE)
     if BLOCKED_EMAILS
@@ -19,10 +21,10 @@ _BLOCKED_HOLD = max((len(e) for e in BLOCKED_EMAILS), default=0) - 1
 
 
 def scrub_blocked(text):
-    """Remove any blocked email from a complete string (non-streaming path)."""
+    """Replace any blocked email in a complete string (non-streaming path)."""
     if not text or not _BLOCKED_RE:
         return text
-    return _BLOCKED_RE.sub("", text)
+    return _BLOCKED_RE.sub(REPLACEMENT_EMAIL, text)
 
 
 class BlockedTextScrubber:
@@ -41,7 +43,7 @@ class BlockedTextScrubber:
         if not _BLOCKED_RE:
             return text or ""
         self._buf += text or ""
-        self._buf = _BLOCKED_RE.sub("", self._buf)
+        self._buf = _BLOCKED_RE.sub(REPLACEMENT_EMAIL, self._buf)
         if _BLOCKED_HOLD <= 0:
             out, self._buf = self._buf, ""
             return out
@@ -52,7 +54,7 @@ class BlockedTextScrubber:
         return ""
 
     def flush(self):
-        out = _BLOCKED_RE.sub("", self._buf) if _BLOCKED_RE else self._buf
+        out = _BLOCKED_RE.sub(REPLACEMENT_EMAIL, self._buf) if _BLOCKED_RE else self._buf
         self._buf = ""
         return out
 
