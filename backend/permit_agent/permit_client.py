@@ -344,28 +344,31 @@ async def count(group_by=None, **filters):
     return out
 
 
-async def search(query=None, limit=12, **filters):
-    """A page of matching permits. Returns the true total plus up to `limit` summaries."""
+async def search(query=None, **filters):
+    """Matching permits for display, plus the true total. FIXED display rule (not caller-set):
+    fewer than 15 matches -> list ALL of them; 15 or more -> list only the first 10 (newest first)."""
     if filters.get("type"):
         filters["type"] = await _resolve_type(filters["type"])
     if filters.get("status") and not isinstance(filters["status"], (list, tuple)):
         filters["status"] = await _resolve_status(
             filters["status"], type=filters.get("type"), module=filters.get("module"))
-    limit = max(1, min(int(limit or 12), 50))
     if query:
         toks = [_esc(t) for t in str(query).split() if _esc(t)]
         q = "_text_:(" + " AND ".join(toks) + ")" if toks else "*"
     else:
         q = "*"
-    qp = [("q", q), ("rows", str(limit)), ("sort", "applied_date desc")] + _fqs(**filters)
+    # Fetch 15: enough to have them all when total < 15, and to slice to 10 when total >= 15.
+    qp = [("q", q), ("rows", "15"), ("sort", "applied_date desc")] + _fqs(**filters)
     data = await _query(qp)
     resp = data["response"]
+    total = resp["numFound"]
+    docs = resp["docs"] if total < 15 else resp["docs"][:10]
     out = {
-        "total": resp["numFound"],
-        "shown": len(resp["docs"]),
-        "results": [_summary_for(d) for d in resp["docs"]],
+        "total": total,
+        "shown": len(docs),
+        "results": [_summary_for(d) for d in docs],
     }
-    if _has_code_enforcement(resp["docs"]):
+    if _has_code_enforcement(docs):
         out["note"] = CODE_ENFORCEMENT_CONTACT
     return out
 
