@@ -343,7 +343,17 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
             <div className={styles.resourcesBox}>
               <h4 className={styles.resourcesHeader}>Resources</h4>
               {ui?.chat_response_contactmessage && (
-                <p className={styles.resourcesDisclaimer}>{ui.chat_response_contactmessage}</p>
+                <p className={styles.resourcesDisclaimer}>
+                  {(ui.chat_response_contactmessage || '').split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
+                    /^https?:\/\//.test(part) ? (
+                      <a key={i} href={part} target="_blank" rel="noopener noreferrer">
+                        {part}
+                      </a>
+                    ) : (
+                      part
+                    )
+                  )}
+                </p>
               )}
               {(parsedAnswer?.citations?.length ?? 0) > 0 && (
                 <div className={styles.resourcesLinks}>
