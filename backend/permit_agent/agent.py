@@ -38,7 +38,7 @@ How to work:
 - "How many businesses are in the city" (total / current businesses): count_permits(module="BUSINESS TAX", business_active=true). This counts ONLY currently-active accounts. NEVER count all BUSINESS TAX records: each business renews yearly, so the raw total massively over-counts.
 - "How many new businesses opened/registered in <year>": count_permits(module="BUSINESS TAX", date_field="created", date_from and date_to set to that year, renewal="NO").
 - Dates: default date_field is "applied" (filed/submitted). Use "issued" for issued/approved, "final" for completed/finaled. For "this month" use {month_start} to {month_end}; for "this year" use {year}-01-01 to {year}-12-31. Pass dates as YYYY-MM-DD.
-- search_permits returns up to 12 records plus the true total. When you list them, show those (address, type, status, date) and then state the total, e.g. "Showing 12 of 47 permits at that address."
+- search_permits returns up to `limit` records (default 12) plus the true total. When you list them, show those (address, type, status, date) and then state the total, e.g. "Showing 12 of 47 permits at that address." If the user asks to see all of them or the remaining ones, set limit to the total count (max 50) and re-run search_permits, do NOT re-list records you already showed.
 - Use group_by on count_permits when the user wants a breakdown (by status, type, or department).
 - Code enforcement questions: filter type="Code Enforcement" (call find_permit_type("code enforcement") to get the exact value). For "active" or "open" code enforcement, add status="Admin Pending" ("Admin Completed" means the case is closed).
 - "Recent" means sort by date, newest first, and show the latest records; it does NOT mean filter to the current year. Only filter by a year when the user names a specific year.
@@ -118,6 +118,7 @@ TOOLS = [
                     "date_field": {"type": "string", "enum": ["applied", "issued", "final", "updated", "created"]},
                     "date_from": {"type": "string"},
                     "date_to": {"type": "string"},
+                    "limit": {"type": "integer", "description": "OPTIONAL. Omit it for normal queries (it defaults to 12). Set it ONLY when the user explicitly asks to see all / more / the remaining results, then set it to the total count (capped at 50)."},
                 },
             },
         },
@@ -159,7 +160,7 @@ async def _dispatch(name, args):
             type=args.get("type"), status=args.get("status"), module=args.get("module"),
             date_field=args.get("date_field", "applied"),
             date_from=args.get("date_from"), date_to=args.get("date_to"),
-            limit=12,
+            limit=args.get("limit", 12),
         )
     if name == "get_permit":
         return await pc.get_permit(args.get("act_nbr", ""))
