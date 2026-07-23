@@ -34,31 +34,38 @@ PERMITS_API_BASE = os.environ.get(
 )
 TIMEOUT = 25
 
+
+# --------------------------- Domain Facts ---------------------------
+
+
 # The agent only ever surfaces permits in these (granted) statuses. Applied to EVERY query
 # in _query, so counts, lists, breakdowns, type resolution, and single-permit lookups are
 # all restricted to them. "Permit Reissued" has no records today but is kept for the future.
 ALLOWED_STATUSES = ["Permit Final", "Permit Issued", "Permit Reissued", "Approved", "Issued"]
 _STATUS_FILTER = "status:(" + " OR ".join(f'"{s}"' for s in ALLOWED_STATUSES) + ")"
 
-# Code Enforcement: Code Compliance (Andrea Ceniceros, 2026-07-20) approved ONLY these fields
-# for display, plus a line directing users to the Code Enforcement DEPARTMENT (not an individual).
-# Never surface description / people / valuation for these records.
-CODE_ENFORCEMENT_MODULE = "CODE ENFORCEMENT"
-CODE_ENFORCEMENT_FIELDS = ["act_nbr", "status", "type", "address", "applied_date"]  # Started = applied_date (confirm)
-# Public DEPARTMENT number per ticket CB-0021 (Andrea's email signed her direct line 238-5279;
-# the general public line is 238-5225). TODO: add the Code Enforcement DEPARTMENT email once
-# confirmed. Do NOT use a personal address such as aceniceros@.
+# Code Enforcement is identified by TYPE.
+# Never surface description / people / valuation for these. (For Burbank)
+CODE_ENFORCEMENT_TYPE = "code enforcement"          # matched case-insensitively against `type`
+CODE_ENFORCEMENT_ACTIVE_STATUS = "Admin Pending"    # open cases ("Admin Completed" = closed); confirm with city
+CODE_ENFORCEMENT_FIELDS = ["act_nbr", "status", "type", "address", "applied_date"]  # For Burbank
 CODE_ENFORCEMENT_CONTACT = "For more information, contact Burbank Code Enforcement at (818) 238-5225."
 
+
+def _is_code_enforcement(doc):
+    return str(doc.get("type", "")).strip().lower() == CODE_ENFORCEMENT_TYPE
+
 # BUSINESS TAX: an account renews yearly, so ONE business has many records over time. Counting
-# every record over-counts massively (raw numFound ~230k). "How many businesses are in the city"
-# means the currently-active accounts = these two statuses (verified ~11,538; Exempt excluded per
-# the city). "New businesses in a year" = accounts first created that year with renewal:"NO".
+# every record over-counts massively. "How many businesses are in the city"
+# means the currently-active accounts = these two statuses. 
+# "New businesses in a year" = accounts first created that year with renewal:"NO".
 ACTIVE_BUSINESS_STATUSES = ["Paid / Current", "Pending Renewal"]
 
 # Fields a user actually cares about, kept small so tool results stay cheap.
 _SUMMARY = ["act_nbr", "type", "status", "department", "address",
             "applied_date", "valuation_calculated", "description"]
+
+# For a single lookup
 _DETAIL = _SUMMARY + ["issued_date", "final_date", "exp_date", "zone",
                       "projectnumber", "people", "amount", "paid", "balance", "city", "zip"]
 
@@ -70,6 +77,7 @@ _DATE_FIELDS = {
     "updated": "updated_date", "created": "created_date",
     "expires": "exp_date", "expiration": "exp_date",
 }
+
 # Fields we allow grouping / distinct-listing on.
 _FACET_FIELDS = {"type", "status", "department", "zone", "city", "module"}
 
@@ -88,6 +96,8 @@ _ALIASES = {
     "sfd": "single-family",
 }
 
+
+# --------------------------- Sanitizer Functions ---------------------------
 
 def _initials(value):
     """First letter of each word, lowercased: 'Accessory Dwelling Unit' -> 'adu'."""
@@ -126,6 +136,9 @@ def _solr_dt(d, end=False):
     return d  # assume already a full datetime
 
 
+
+# --------------------------- Query Builder ---------------------------
+
 def _fqs(type=None, status=None, department=None, module=None, address=None,
          date_field="applied", date_from=None, date_to=None, renewal=None):
     """Build the list of ('fq', clause) tuples for the given filters."""
@@ -163,6 +176,7 @@ def _fqs(type=None, status=None, department=None, module=None, address=None,
     return out
 
 
+# HTTP Call to the API
 async def _query(params, facet=None, status_filter=False):
     # The granted-permit status whitelist (ALLOWED_STATUSES) is RETIRED as the default. Applied
     # to every query it (a) filtered out business-tax/license records (Active, Paid, Out of
@@ -190,13 +204,13 @@ def _pick(doc, fields):
 def _summary_for(doc):
     """Per-record summary. Code Enforcement records are restricted to the city-approved fields
     (Permit Number, Status, Type, Address, Started); every other module uses the full summary."""
-    if str(doc.get("module", "")).upper() == CODE_ENFORCEMENT_MODULE:
+    if _is_code_enforcement(doc):
         return _pick(doc, CODE_ENFORCEMENT_FIELDS)
     return _pick(doc, _SUMMARY)
 
 
 def _has_code_enforcement(docs):
-    return any(str(d.get("module", "")).upper() == CODE_ENFORCEMENT_MODULE for d in docs)
+    return any(_is_code_enforcement(d) for d in docs)
 
 
 # --------------------------- type resolution ---------------------------
@@ -210,41 +224,67 @@ async def _all_types():
     return _types_cache["list"]
 
 
-async def find_permit_type(keyword):
-    """Resolve a user's word to the exact stored type value(s).
+def _match_values(keyword, pairs, aliases=None):
+    """Resolve a user's word to the exact stored value(s) from `pairs` = [(value, count)].
 
-    Tiers, each a looser fallback: all-words substring -> any-word substring ->
-    fuzzy (typo catch). Returns [] when nothing is close enough, so the agent can
-    say 'I couldn't find that type' instead of guessing.
+    Tiers, each a looser fallback: all-words whole-word -> any long word -> acronym ->
+    fuzzy (typo catch). Returns [] when nothing is close enough, so the agent can say
+    'I couldn't find that' instead of guessing. Shared by type and status resolution.
     """
-    types = await _all_types()
     low = str(keyword).strip().lower()
-    low = _ALIASES.get(low, low)  # expand a known acronym/synonym first
+    if aliases:
+        low = aliases.get(low, low)   # expand a known acronym/synonym first
     raw = low.split()
     words = [w for w in raw if w not in _STOP] or raw
 
     # 1) every keyword word present as a whole word
-    allm = [(v, c) for v, c in types if all(_has_word(v.lower(), w) for w in words)]
+    allm = [(v, c) for v, c in pairs if all(_has_word(v.lower(), w) for w in words)]
     if allm:
         return [{"value": v, "count": c} for v, c in allm[:8]]
 
     # 2) any meaningful word (>=4 chars) present as a whole word
     big = [w for w in words if len(w) >= 4]
-    anym = [(v, c) for v, c in types if any(_has_word(v.lower(), w) for w in big)] if big else []
+    anym = [(v, c) for v, c in pairs if any(_has_word(v.lower(), w) for w in big)] if big else []
     if anym:
         return [{"value": v, "count": c} for v, c in anym[:8]]
 
-    # acronym tier: a single short token (e.g. "CUP", "TI") -> a type's word-initials
+    # acronym tier: a single short token (e.g. "CUP", "TI") -> a value's word-initials
     ak = re.sub(r"[^a-z]", "", low)
     if " " not in low and 2 <= len(ak) <= 5:
-        acro = [(v, c) for v, c in types if _initials(v) == ak]
+        acro = [(v, c) for v, c in pairs if _initials(v) == ak]
         if acro:
             return [{"value": v, "count": c} for v, c in acro[:8]]
 
     key = " ".join(words)
-    scored = [(v, c, difflib.SequenceMatcher(None, key, v.lower()).ratio()) for v, c in types]
+    scored = [(v, c, difflib.SequenceMatcher(None, key, v.lower()).ratio()) for v, c in pairs]
     best = [(v, c) for v, c, s in sorted(scored, key=lambda x: x[2], reverse=True) if s > _FUZZY_FLOOR]
     return [{"value": v, "count": c} for v, c in best[:5]]
+
+
+async def find_permit_type(keyword):
+    """Resolve a user's word to the exact stored TYPE value(s), e.g. 'solar' -> 'Solar'."""
+    return _match_values(keyword, await _all_types(), _ALIASES)
+
+
+async def _statuses_in(filters):
+    """Distinct status values that actually occur within the given type/module filters, so a
+    status word can be resolved IN CONTEXT (e.g. 'pending' for solar -> only 'Admin Pending')."""
+    qp = [("q", "*"), ("rows", "0")] + _fqs(**filters)
+    facet = {"g": {"type": "terms", "field": "status", "limit": 100, "sort": "count"}}
+    data = await _query(qp, facet)
+    return [(b["val"], b["count"]) for b in data.get("facets", {}).get("g", {}).get("buckets", [])]
+
+
+async def find_permit_status(keyword, type=None, module=None):
+    """Resolve a status word (e.g. 'pending', 'active', 'expired', 'issued') to the exact stored
+    status value(s). Scoped to the type/module context when given, so the same word resolves to the
+    right status for that permit kind instead of every status that contains it."""
+    filters = {}
+    if type:
+        filters["type"] = await _resolve_type(type)
+    if module:
+        filters["module"] = module
+    return _match_values(keyword, await _statuses_in(filters))
 
 
 # ------------------------------- public API -------------------------------
@@ -266,10 +306,31 @@ async def _resolve_type(t):
     return m[0]["value"] if len(m) == 1 else t
 
 
+async def _resolve_status(s, type=None, module=None):
+    """Map a status word to the exact stored value within the type/module context, if it isn't one
+    already. Only substitutes on a single confident match; ambiguous input is left unchanged so the
+    agent can disambiguate. This is why 'pending' for solar resolves to 'Admin Pending'."""
+    if not s:
+        return s
+    filters = {}
+    if type:                              # already resolved by the caller
+        filters["type"] = type
+    if module:
+        filters["module"] = module
+    statuses = await _statuses_in(filters)
+    if s in {v for v, _ in statuses}:
+        return s
+    m = _match_values(s, statuses)
+    return m[0]["value"] if len(m) == 1 else s
+
+
 async def count(group_by=None, **filters):
     """Exact count of permits matching the filters, plus an optional grouped breakdown."""
     if filters.get("type"):
         filters["type"] = await _resolve_type(filters["type"])
+    if filters.get("status") and not isinstance(filters["status"], (list, tuple)):
+        filters["status"] = await _resolve_status(
+            filters["status"], type=filters.get("type"), module=filters.get("module"))
     qp = [("q", "*"), ("rows", "0")] + _fqs(**filters)
     facet = None
     if group_by:
@@ -287,6 +348,9 @@ async def search(query=None, limit=12, **filters):
     """A page of matching permits. Returns the true total plus up to `limit` summaries."""
     if filters.get("type"):
         filters["type"] = await _resolve_type(filters["type"])
+    if filters.get("status") and not isinstance(filters["status"], (list, tuple)):
+        filters["status"] = await _resolve_status(
+            filters["status"], type=filters.get("type"), module=filters.get("module"))
     limit = max(1, min(int(limit or 12), 50))
     if query:
         toks = [_esc(t) for t in str(query).split() if _esc(t)]
@@ -317,7 +381,7 @@ async def get_permit(act_nbr):
     if not chosen:
         return {"found": False}
     doc = chosen[0]
-    if str(doc.get("module", "")).upper() == CODE_ENFORCEMENT_MODULE:
+    if _is_code_enforcement(doc):
         return {"found": True, "exact": bool(exact),
                 "permit": _pick(doc, CODE_ENFORCEMENT_FIELDS), "note": CODE_ENFORCEMENT_CONTACT}
     return {"found": True, "exact": bool(exact), "permit": _pick(doc, _DETAIL)}

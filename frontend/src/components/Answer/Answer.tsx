@@ -318,7 +318,17 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
             </Stack.Item>
           )*/}
           <Stack.Item className={styles.answerDisclaimerContainer}>
-            <span className={styles.answerDisclaimer}>{ui?.chat_response_contactmessage}</span>
+            <span className={styles.answerDisclaimer}>
+              {(ui?.chat_response_contactmessage || '').split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
+                /^https?:\/\//.test(part) ? (
+                  <a key={i} href={part} target="_blank" rel="noopener noreferrer">
+                    {part}
+                  </a>
+                ) : (
+                  part
+                )
+              )}
+            </span>
           </Stack.Item>
           <Stack.Item className={styles.answerHeader}>
               {FEEDBACK_ENABLED && answer.message_id !== undefined && (

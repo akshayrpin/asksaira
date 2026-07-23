@@ -24,7 +24,7 @@ MAX_STEPS = 6
 # tax or code enforcement (those live in other modules). ePALS only holds records from ~2006 on.
 NON_PERMIT_MODULES = {"BUSINESS TAX", "BUSINESS LICENSE", "CODE ENFORCEMENT"}
 OLDER_PERMITS_NOTE = ("\n\nFor permits older than 2006, view them in the City's permit portal: "
-                      "https://permit.burbankca.gov/pi/")
+                      "https://www.burbankca.gov/web/city-clerks-office/public-records-portal")
 
 SYSTEM = """You are the City of Burbank permits assistant. You answer questions about EXISTING permit records: how many, lists, and single-permit lookups. You are read-only and only report what the tools return. Never invent a number, type, status, or permit.
 
@@ -32,13 +32,16 @@ Today is {today}.
 
 How to work:
 - When the user names a kind of permit in words (e.g. "solar", "ADU", "pool", "electrical"), call find_permit_type FIRST to get the exact stored type value, then use that exact value in count_permits / search_permits. If find_permit_type returns nothing, tell the user you couldn't find that permit type and ask them to rephrase; do NOT guess a type.
+- When the user describes a status in words (e.g. "pending", "active", "expired", "issued"), call find_permit_status FIRST (pass the type and/or module you're filtering on for context) to get the exact stored status value, then use it. Statuses differ by permit kind; do NOT guess a status string.
 - "how many ..." -> count_permits. "show / list / which permits ..." or anything tied to an address -> search_permits. A specific permit number (like BS2504744) -> get_permit.
 - Business questions use the module filter, NOT find_permit_type (a business isn't a single permit type). Use module="BUSINESS TAX" for business tax, module="BUSINESS LICENSE" for business licenses.
-- "How many businesses are in the city" (total / current businesses): count_permits(module="BUSINESS TAX", business_active=true). This counts ONLY currently-active accounts. NEVER count all BUSINESS TAX records: each business renews yearly, so the raw total (~230k) massively over-counts.
+- "How many businesses are in the city" (total / current businesses): count_permits(module="BUSINESS TAX", business_active=true). This counts ONLY currently-active accounts. NEVER count all BUSINESS TAX records: each business renews yearly, so the raw total massively over-counts.
 - "How many new businesses opened/registered in <year>": count_permits(module="BUSINESS TAX", date_field="created", date_from and date_to set to that year, renewal="NO").
 - Dates: default date_field is "applied" (filed/submitted). Use "issued" for issued/approved, "final" for completed/finaled. For "this month" use {month_start} to {month_end}; for "this year" use {year}-01-01 to {year}-12-31. Pass dates as YYYY-MM-DD.
 - search_permits returns up to 12 records plus the true total. When you list them, show those (address, type, status, date) and then state the total, e.g. "Showing 12 of 47 permits at that address."
 - Use group_by on count_permits when the user wants a breakdown (by status, type, or department).
+- Code enforcement questions: filter type="Code Enforcement" (call find_permit_type("code enforcement") to get the exact value). For "active" or "open" code enforcement, add status="Admin Pending" ("Admin Completed" means the case is closed).
+- "Recent" means sort by date, newest first, and show the latest records; it does NOT mean filter to the current year. Only filter by a year when the user names a specific year.
 - Be concise. Give the number or the list plainly. If a result is 0, say there are none.
 - If a tool result includes a "note" field, include it verbatim in your answer. It is a city-required line (e.g. the Code Compliance contact for code-enforcement records).
 """
@@ -59,6 +62,22 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "find_permit_status",
+            "description": "Resolve a status word (e.g. 'pending', 'active', 'expired', 'issued', 'final') to the exact stored status value(s) with counts. Statuses differ by permit kind, so pass 'type' and/or 'module' for context. Call this before filtering by status when the user describes a status in words.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string"},
+                    "type": {"type": "string", "description": "exact permit type for context (from find_permit_type)"},
+                    "module": {"type": "string", "enum": ["BUSINESS TAX", "BUSINESS LICENSE", "BUILDING", "PUBLIC WORKS", "PLANNING", "PARKING", "HOUSING"]},
+                },
+                "required": ["keyword"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "count_permits",
             "description": "Exact count of permits matching the filters. Optionally group_by status/type/department for a breakdown. Use the exact type value from find_permit_type.",
             "parameters": {
@@ -67,7 +86,7 @@ TOOLS = [
                     "type": {"type": "string", "description": "exact stored type value"},
                     "status": {"type": "string"},
                     "department": {"type": "string"},
-                    "module": {"type": "string", "enum": ["BUSINESS TAX", "BUSINESS LICENSE", "BUILDING", "PUBLIC WORKS", "CODE ENFORCEMENT", "PLANNING", "PARKING", "HOUSING"],
+                    "module": {"type": "string", "enum": ["BUSINESS TAX", "BUSINESS LICENSE", "BUILDING", "PUBLIC WORKS", "PLANNING", "PARKING", "HOUSING"],
                                "description": "high-level category; use 'BUSINESS TAX' for new businesses, 'BUSINESS LICENSE' for business licenses"},
                     "address": {"type": "string", "description": "street address to restrict the count to, e.g. '123 Main St'"},
                     "date_field": {"type": "string", "enum": ["applied", "issued", "final", "updated", "created"]},
@@ -93,7 +112,7 @@ TOOLS = [
                     "address": {"type": "string", "description": "street address to match"},
                     "type": {"type": "string", "description": "exact stored type value"},
                     "status": {"type": "string"},
-                    "module": {"type": "string", "enum": ["BUSINESS TAX", "BUSINESS LICENSE", "BUILDING", "PUBLIC WORKS", "CODE ENFORCEMENT", "PLANNING", "PARKING", "HOUSING"],
+                    "module": {"type": "string", "enum": ["BUSINESS TAX", "BUSINESS LICENSE", "BUILDING", "PUBLIC WORKS", "PLANNING", "PARKING", "HOUSING"],
                                "description": "high-level category; 'BUSINESS TAX' for businesses, 'BUSINESS LICENSE' for business licenses"},
                     "query": {"type": "string", "description": "free-text keywords (applicant name, etc.)"},
                     "date_field": {"type": "string", "enum": ["applied", "issued", "final", "updated", "created"]},
@@ -121,6 +140,9 @@ TOOLS = [
 async def _dispatch(name, args):
     if name == "find_permit_type":
         return {"matches": await pc.find_permit_type(args.get("keyword", ""))}
+    if name == "find_permit_status":
+        return {"matches": await pc.find_permit_status(
+            args.get("keyword", ""), type=args.get("type"), module=args.get("module"))}
     if name == "count_permits":
         status = pc.ACTIVE_BUSINESS_STATUSES if args.get("business_active") else args.get("status")
         return await pc.count(
