@@ -34,6 +34,7 @@ from backend.utils import (
     format_non_streaming_response,
     convert_to_pf_format,
     format_pf_non_streaming_response,
+    BlockedTextScrubber,
 )
 
 import time
@@ -622,8 +623,38 @@ async def stream_chat_request(request_body, request_headers):
     response, apim_request_id = await send_chat_request(request_body, request_headers)
     
     async def generate():
+        scrubber = BlockedTextScrubber()
+        meta = None
         async for completionChunk in response:
-            yield format_stream_response(completionChunk, history_metadata, apim_request_id)
+            obj = format_stream_response(completionChunk, history_metadata, apim_request_id)
+            if not obj:
+                continue
+            messages = obj.get("choices", [{}])[0].get("messages", [])
+            content_msg = next(
+                (m for m in messages if m.get("role") == "assistant" and "content" in m),
+                None,
+            )
+            if content_msg is not None:
+                meta = {k: obj.get(k) for k in ("id", "model", "created", "object")}
+                emitted = scrubber.feed(content_msg["content"])
+                if not emitted:
+                    continue
+                content_msg["content"] = emitted
+                yield obj
+            else:
+                yield obj  # context / citation messages pass through untouched
+        tail = scrubber.flush()
+        if tail:
+            base = meta or {
+                "id": "", "model": "", "created": int(time.time()),
+                "object": "extensions.chat.completion.chunk",
+            }
+            yield {
+                **base,
+                "choices": [{"messages": [{"role": "assistant", "content": tail}]}],
+                "history_metadata": history_metadata,
+                "apim-request-id": apim_request_id,
+            }
 
     return generate()
 
