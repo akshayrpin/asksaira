@@ -73,7 +73,7 @@ async def answer_website_query(question, client, model, k=8, candidates=50):
     chunks = await _retrieve(emb.data[0].embedding, question, k, candidates)
 
     sources = "\n\n".join(
-        f"[doc{i + 1}] {c.get('title', '')}  ({c.get('url', '')})\n{c.get('content', '')}"
+        f"[doc{i + 1}] {c.get('breadcrumb') or c.get('title', '')}  ({c.get('url', '')})\n{c.get('content', '')}"
         for i, c in enumerate(chunks)
     )
     resp = await client.chat.completions.create(
