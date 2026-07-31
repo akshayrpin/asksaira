@@ -44,11 +44,17 @@ try:
 except Exception:  # missing aiohttp etc. -> feature simply stays off
     permit_agent = None
     logging.exception("permit agent unavailable; permit questions fall back to RAG")
-try:
-    from backend import meetings as meetings_feed
-except Exception:  # missing deps -> live meeting lookup stays off
-    meetings_feed = None
-    logging.exception("meetings feed unavailable; meeting questions fall back to RAG")
+try:  # City calendar (events + meetings) from events.json; replaces the Granicus meetings feed
+    from backend import events as events_feed
+except Exception:
+    events_feed = None
+    logging.exception("events feed unavailable; calendar questions fall back to RAG")
+try:  # code pipeline for website questions (burbank-code-v1); opt-in via CODE_PIPELINE_ENABLED
+    from backend import website_pipeline
+except Exception:
+    website_pipeline = None
+    logging.exception("website pipeline unavailable; website questions use on-your-data")
+CODE_PIPELINE_ENABLED = bool(website_pipeline) and os.environ.get("CODE_PIPELINE_ENABLED", "0") != "0"
 
 bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
 
@@ -393,9 +399,9 @@ INDEX_ROUTING_ENABLED = bool(PERMITS_INDEX and CODES_INDEX)
 
 ROUTER_SYSTEM_MESSAGE = (
     "You route a resident's question for a city government assistant to ONE data source. "
-    "Reply with exactly one lowercase word: website, permit, or codes.\n"
+    "Reply with exactly one lowercase word: website, permit, codes, or events.\n"
     "- website: people, officials, departments, contacts, phone/email, hours, addresses, "
-    "city services, news, events, FAQs, general how-to questions, AND how to apply for or "
+    "city services, news, FAQs, general how-to questions, AND how to apply for or "
     "pay for a permit, permit fees, what documents are needed, which permit you need for a "
     "project, what permit types the city offers in general, and Building & Safety info.\n"
     "- permit: looking up SPECIFIC existing permit records, their status, or any COUNT, "
@@ -409,6 +415,11 @@ ROUTER_SYSTEM_MESSAGE = (
     "permit types exist in general.\n"
     "- codes: the municipal code text, ordinances, or regulations themselves (zoning, "
     "setbacks, what the code/law says).\n"
+    "- events: anything on the City calendar. Upcoming City events, activities, festivals, "
+    "programs, workshops, things to do, AND City Council / board / commission MEETING dates and "
+    "times (e.g. 'when is the next city council meeting', 'next planning commission meeting'), "
+    "'what's happening', 'this weekend', the events or meetings calendar. NOT permit or code "
+    "lookups.\n"
     "If you are unsure, answer website."
 )
 
@@ -445,6 +456,8 @@ async def classify_domain(user_query, client, history=None):
         return "permit"
     if "code" in label:
         return "codes"
+    if "event" in label:
+        return "events"
     return "website"
 
 
@@ -507,26 +520,26 @@ async def try_permit_answer(request_body):
         return None
 
 
-# Live meeting-schedule lookup (Burbank-specific: only active when its Granicus feed URL is set).
-MEETINGS_ENABLED = bool(meetings_feed) and bool(os.environ.get("MEETINGS_FEED_URL"))
+# City calendar lookup (events + meetings) from events.json. Routed via the classifier's
+# 'events' domain. Replaces the Granicus meetings feed; events.json must be kept fresh.
+EVENTS_ENABLED = bool(events_feed) and events_feed.available()
 
 
-async def try_meetings_answer(request_body):
-    """Answer 'when is the next <body> meeting' from the live Granicus feed. Returns the answer
-    string, or None to fall through to RAG. Off unless MEETINGS_FEED_URL is set."""
-    if not MEETINGS_ENABLED:
-        return None
-    messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
-    user_query = _latest_user_query(messages)
-    if not user_query or not meetings_feed.is_meeting_query(user_query):
+async def try_events_answer(request_body):
+    """If the classifier says EVENTS (upcoming events or a Council/board/commission meeting time),
+    answer from the current events.json. Returns the answer string, or None to fall through to RAG."""
+    if not EVENTS_ENABLED:
         return None
     try:
-        answer = await meetings_feed.answer_meeting_query(user_query, datetime.date.today())
-        if answer:
-            logging.info("[MEETINGS FEED] handled: %s", user_query)
-        return answer
+        client = await init_openai_client()
+        user_query = _latest_user_query(request_body.get("messages", []))
+        if not user_query or await classify_domain(user_query, client) != "events":
+            return None
+        logging.info("[EVENTS] handling: %s", user_query)
+        return await events_feed.answer_events_query(
+            user_query, client, app_settings.azure_openai.model, datetime.date.today())
     except Exception:
-        logging.exception("meetings feed failed; falling back to RAG")
+        logging.exception("events feed failed; falling back to RAG")
         return None
 
 
@@ -559,6 +572,52 @@ def permit_stream_response(answer, history_metadata):
         obj["apim-request-id"] = "permit-agent"
         yield obj
     return generate()
+
+
+def _website_messages(answer, context):
+    """Tool (citations) + assistant, same shape on-your-data produces, so the frontend renders
+    citations identically."""
+    return [{"role": "tool", "content": json.dumps(context)},
+            {"role": "assistant", "content": answer}]
+
+
+def website_non_streaming_response(answer, context, history_metadata):
+    obj = _permit_message_obj()
+    obj["id"] = "website-pipeline"
+    obj["choices"][0]["messages"] = _website_messages(answer, context)
+    obj["history_metadata"] = history_metadata
+    obj["apim-request-id"] = "website-pipeline"
+    return obj
+
+
+def website_stream_response(answer, context, history_metadata):
+    async def generate():
+        obj = _permit_message_obj()
+        obj["object"] = "extensions.chat.completion.chunk"
+        obj["id"] = "website-pipeline"
+        obj["choices"][0]["messages"] = _website_messages(answer, context)
+        obj["history_metadata"] = history_metadata
+        obj["apim-request-id"] = "website-pipeline"
+        yield obj
+    return generate()
+
+
+async def try_website_answer(request_body):
+    """If enabled and the classifier says WEBSITE, answer from burbank-code-v1 (hybrid + semantic
+    rerank + in-depth prompt). Returns (answer, context) or None to fall through to on-your-data.
+    Routing is unchanged: codes/permit/meetings never reach here."""
+    if not CODE_PIPELINE_ENABLED:
+        return None
+    try:
+        client = await init_openai_client()
+        q = _latest_user_query(request_body.get("messages", []))
+        if not q or await classify_domain(q, client) != "website":
+            return None
+        logging.info("[CODE PIPELINE] website: %s", q)
+        return await website_pipeline.answer_website_query(q, client, app_settings.azure_openai.model)
+    except Exception:
+        logging.exception("website pipeline failed; falling back to on-your-data")
+        return None
 
 
 async def send_chat_request(request_body, request_headers):
@@ -610,9 +669,12 @@ async def complete_chat_request(request_body, request_headers):
         permit_answer = await try_permit_answer(request_body)
         if permit_answer is not None:
             return permit_non_streaming_response(permit_answer, history_metadata)
-        meetings_answer = await try_meetings_answer(request_body)
-        if meetings_answer is not None:
-            return permit_non_streaming_response(meetings_answer, history_metadata)
+        events_answer = await try_events_answer(request_body)
+        if events_answer is not None:
+            return permit_non_streaming_response(events_answer, history_metadata)
+        website = await try_website_answer(request_body)   # website -> code pipeline (if enabled)
+        if website is not None:
+            return website_non_streaming_response(website[0], website[1], history_metadata)
         response, apim_request_id = await send_chat_request(request_body, request_headers)
         return format_non_streaming_response(response, history_metadata, apim_request_id)
 
@@ -622,11 +684,14 @@ async def stream_chat_request(request_body, request_headers):
     permit_answer = await try_permit_answer(request_body)
     if permit_answer is not None:
         return permit_stream_response(permit_answer, history_metadata)
-    meetings_answer = await try_meetings_answer(request_body)
-    if meetings_answer is not None:
-        return permit_stream_response(meetings_answer, history_metadata)
+    events_answer = await try_events_answer(request_body)
+    if events_answer is not None:
+        return permit_stream_response(events_answer, history_metadata)
+    website = await try_website_answer(request_body)   # website -> code pipeline (if enabled)
+    if website is not None:
+        return website_stream_response(website[0], website[1], history_metadata)
     response, apim_request_id = await send_chat_request(request_body, request_headers)
-    
+
     async def generate():
         scrubber = BlockedTextScrubber()
         meta = None
