@@ -23,15 +23,18 @@ except Exception:
 
 EVENTS_JSON = os.environ.get("EVENTS_JSON") or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events.json")
+CALENDAR_URL = os.environ.get("EVENTS_CALENDAR_URL", "https://www.burbankca.gov/calendar")
 
 SYSTEM = (
     "You are the City of Burbank's assistant answering about the City calendar, both upcoming "
     "events AND City Council / board / commission MEETINGS, using ONLY the list provided (it is "
-    "current as of the given date). Answer with the relevant items, their dates/times, locations, "
-    "and links. If an entry's title is marked 'Dark' or 'Canceled', that meeting is NOT being held "
-    "(a recess or cancellation), do not present it as happening; give the next actual occurrence "
-    "instead. Be specific and helpful; if nothing matches what they asked, say what is coming up "
-    "soon. Never invent events, meetings, or details."
+    "current as of the given date). Answer with the relevant items and their dates, times, and "
+    "locations. If an entry's title is marked 'Dark' or 'Canceled', that meeting is NOT being held "
+    "(a recess or cancellation); do not present it as happening, give the next actual occurrence "
+    "instead. Do NOT refer to, name, or imply links to any specific web page (no 'agenda page', no "
+    "'City Council Meetings page', etc.), the list has no page URLs and a City calendar link is "
+    "added automatically at the end. Be specific and helpful; if nothing matches what they asked, "
+    "say what is coming up soon. Never invent events, meetings, dates, links, or details."
 )
 
 
@@ -106,4 +109,5 @@ async def answer_events_query(question, client, model, today):
                   {"role": "user",
                    "content": f"Today is {today.isoformat()}.\nQuestion: {question}\n\n"
                               f"Upcoming City events:\n{listing}"}])
-    return (resp.choices[0].message.content or "").strip()
+    answer = (resp.choices[0].message.content or "").strip()
+    return f"{answer}\n\nSee the full City calendar: {CALENDAR_URL}"
