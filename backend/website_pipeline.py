@@ -13,6 +13,7 @@ search service + code index from env (already present in the app settings).
 """
 
 import os
+from datetime import date
 
 import aiohttp
 
@@ -40,7 +41,12 @@ SYSTEM = (
     "appears in the sources.\n"
     "- If the sources don't fully cover the question, answer what they do cover, say what's "
     "missing, and point to the closest relevant office or page.\n"
-    "- Prefer the most recent/current information when sources differ."
+    "- Prefer the most recent/current information when sources differ.\n"
+    "- Today's date is {today}. Sources may describe past events or expired terms. For any "
+    "time-bound fact (terms of office, appointments, whether someone 'currently' holds a role, "
+    "deadlines, fees), compare its dates against today: if a stated period has already ended, "
+    "describe it in the past tense, not as current. Do not assume the most recently named person "
+    "still holds a role."
 )
 
 
@@ -72,7 +78,7 @@ async def answer_website_query(question, client, model, k=8, candidates=50):
     )
     resp = await client.chat.completions.create(
         model=model, temperature=0,
-        messages=[{"role": "system", "content": SYSTEM},
+        messages=[{"role": "system", "content": SYSTEM.format(today=date.today().isoformat())},
                   {"role": "user", "content": f"Question: {question}\n\nSources:\n{sources}"}])
     answer = (resp.choices[0].message.content or "").strip()
 
