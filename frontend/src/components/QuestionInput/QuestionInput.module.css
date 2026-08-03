@@ -7,7 +7,24 @@
   background: #ffffff;
   position: relative;
   min-height: 66px;
+  transition: border 0.15s ease, box-shadow 0.15s ease;
+  overflow: hidden;
 }
+
+.questionInputContainerTop:hover {
+  border: 1px solid #2C60AF;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.questionInputContainerTop:focus-within {
+  border: 1px solid #2C60AF;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.questionInputContainerTop:focus-within textarea {
+  font-weight: 600;
+}
+
 .questionInputContainerTop div {
   background: none;
 }
@@ -38,6 +55,22 @@
   border: 1px solid #d6dbe3;
   border-radius: 10px;
   align-items: center;
+  transition: border 0.15s ease, box-shadow 0.15s ease;
+  overflow: hidden;
+}
+
+.questionInputContainer:hover {
+  border: 1px solid #2C60AF;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.questionInputContainer:focus-within {
+  border: 1px solid #2C60AF;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.questionInputContainer:focus-within textarea {
+  font-weight: 600;
 }
 
 .questionInputTextArea {

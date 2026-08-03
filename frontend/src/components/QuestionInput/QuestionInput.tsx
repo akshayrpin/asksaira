@@ -3,6 +3,7 @@ import { FontIcon, Stack, TextField } from '@fluentui/react'
 
 import styles from './QuestionInput.module.css'
 import SearchButton from '../../assets/search-button.svg'
+import SearchButtonHover from '../../assets/search-button-hover.svg'
 import { ChatMessage } from '../../api'
 import { AppStateContext } from '../../state/AppProvider'
 import { resizeImage } from '../../utils/resizeImage'
@@ -20,6 +21,7 @@ interface Props {
 export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conversationId,questionInputTop }: Props) => {
   const [question, setQuestion] = useState<string>('')
   const [base64Image, setBase64Image] = useState<string | null>(null);
+  const [isActive, setIsActive] = useState<boolean>(false);
   const isHeroInput = questionInputTop === 'Y'
 
   const appStateContext = useContext(AppStateContext)
@@ -76,7 +78,13 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
   const sendQuestionDisabled = disabled || !question.trim()
 
   return (
-    <Stack horizontal className={questionInputTop == "Y" ? styles.questionInputContainerTop : styles.questionInputContainer}>
+    <Stack
+      horizontal
+      className={questionInputTop == "Y" ? styles.questionInputContainerTop : styles.questionInputContainer}
+      onMouseEnter={() => setIsActive(true)}
+      onMouseLeave={() => setIsActive(false)}
+      onFocus={() => setIsActive(true)}
+      onBlur={() => setIsActive(false)}>
       <TextField
         className={styles.questionInputTextArea}
         placeholder={placeholder}
@@ -113,9 +121,9 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
         onClick={sendQuestion}
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? sendQuestion() : null)}>
         {sendQuestionDisabled ? (
-          <img src={SearchButton} className={styles.questionInputSendButtonDisabled} alt="Search" />
+          <img src={isActive ? SearchButtonHover : SearchButton} className={styles.questionInputSendButtonDisabled} alt="Search" />
         ) : (
-          <img src={SearchButton} className={styles.questionInputSendButton} alt="Search" />
+          <img src={isActive ? SearchButtonHover : SearchButton} className={styles.questionInputSendButton} alt="Search" />
         )}
       </div>
       {/* <div className={styles.questionInputBottomBorder} /> */}

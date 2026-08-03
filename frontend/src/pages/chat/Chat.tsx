@@ -50,6 +50,13 @@ const Chat = () => {
   const appStateContext = useContext(AppStateContext)
   const ui = appStateContext?.state.frontendSettings?.ui
   const AUTH_ENABLED = appStateContext?.state.frontendSettings?.auth_enabled
+  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 480)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 480)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const commonQuestions: string[] = [
     ui?.example_option_1,
@@ -884,7 +891,7 @@ const Chat = () => {
                   <div className={styles.landingInputWrap}>
                     <QuestionInput
                       clearOnSend
-                      placeholder="Ask about permits, utilities, parking, events, and more..."
+                      placeholder={isMobile ? 'Ask here...' : 'Ask about permits, utilities, parking, events, and more...'}
                       disabled={isLoading}
                       onSend={handleSendQuestion}
                       conversationId={
@@ -926,6 +933,11 @@ const Chat = () => {
                     </ul>
                   </article>
                 </section>
+
+                <div className={styles.landingPoweredBy}>
+                  <span className={styles.chatPoweredByText}>Powered by </span>
+                  <a href="https://www.sairasolutions.com/" target="_blank" rel="noreferrer" className={styles.chatPoweredByLink}>Saira Solutions</a>
+                </div>
               </Stack>
             ) : (
               <div className={styles.chatMessageStream} style={{ marginBottom: isLoading ? '40px' : '0px' }} role="log" ref={chatMessageStreamEnd} >
@@ -1044,7 +1056,7 @@ const Chat = () => {
                 </Stack>                
                 <QuestionInput
                   clearOnSend
-                  placeholder="Ask about permits, utilities, parking, events, and more..."
+                  placeholder={isMobile ? 'Ask here...' : 'Ask about permits, utilities, parking, events, and more...'}
                   disabled={isLoading}
                   onSend={handleSendQuestion}
                   conversationId={
@@ -1052,6 +1064,10 @@ const Chat = () => {
                   }
                   questionInputTop="N"
                 />
+                <div className={styles.chatPoweredBy}>
+                  <span className={styles.chatPoweredByText}>Powered by </span>
+                  <a href="https://www.sairasolutions.com/" target="_blank" rel="noreferrer" className={styles.chatPoweredByLink}>Saira Solutions</a>
+                </div>
               </Stack>              
             )}
           </div>
