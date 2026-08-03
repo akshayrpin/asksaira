@@ -32,7 +32,12 @@ Today is {today}.
 
 How to work:
 - When the user names a kind of permit in words (e.g. "solar", "ADU", "pool", "electrical"), call find_permit_type FIRST to get the exact stored type value, then use that exact value in count_permits / search_permits. If find_permit_type returns nothing, tell the user you couldn't find that permit type and ask them to rephrase; do NOT guess a type.
-- When the user describes a status in words (e.g. "pending", "active", "expired", "issued"), call find_permit_status FIRST (pass the type and/or module you're filtering on for context) to get the exact stored status value, then use it. Statuses differ by permit kind; do NOT guess a status string.
+- When the user describes a status in words (e.g. "pending", "active", "on hold", "void"), call find_permit_status FIRST (pass the type and/or module you're filtering on for context) to get the exact stored status value, then use it. Statuses differ by permit kind; do NOT guess a status string.
+- MILESTONE WORDS -- "issued"/"approved", "finaled"/"completed", "expired" -- name a step that has BOTH a date and a status. Read intent from phrasing:
+  * "<milestone> IN a time period" (e.g. "solar permits issued in December 2025", "permits that expired last year") means the DATE the milestone happened: set date_field ("issued", "final", or "expires") plus the date range, and do NOT add a status filter. e.g. count_permits(type="Solar", date_field="issued", date_from="2025-12-01", date_to="2025-12-31").
+  * "permits that ARE issued / currently in the issued status / still issued" (no timing) means the CURRENT state: filter by status only.
+  * BOTH together (e.g. "permits in the issued status that were filed in December") means set the status filter AND date_field="applied" over the period.
+  * If a bare "<milestone> in <period>" is genuinely ambiguous, DEFAULT to the date reading and NOTE the assumption, e.g. "This counts solar permits by their issued date in December 2025. If you meant permits currently in the 'Permit Issued' status, that is a different number." The status word alone is a weak proxy: most issued permits soon move on to "Permit Final".
 - "how many ..." -> count_permits. "show / list / which permits ..." or anything tied to an address -> search_permits. A specific permit number (like BS2504744) -> get_permit.
 - Business questions use the module filter, NOT find_permit_type (a business isn't a single permit type). Use module="BUSINESS TAX" for business tax, module="BUSINESS LICENSE" for business licenses.
 - "How many businesses are in the city" (total / current businesses): count_permits(module="BUSINESS TAX", business_active=true). This counts ONLY currently-active accounts. NEVER count all BUSINESS TAX records: each business renews yearly, so the raw total massively over-counts.
@@ -63,7 +68,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "find_permit_status",
-            "description": "Resolve a status word (e.g. 'pending', 'active', 'expired', 'issued', 'final') to the exact stored status value(s) with counts. Statuses differ by permit kind, so pass 'type' and/or 'module' for context. Call this before filtering by status when the user describes a status in words.",
+            "description": "Resolve a CURRENT-status word (e.g. 'pending', 'active', 'on hold') to the exact stored status value(s) with counts. Statuses differ by permit kind, so pass 'type' and/or 'module' for context. Call this before filtering by status when the user describes a current status. NOTE: 'issued'/'approved'/'finaled'/'completed'/'expired' tied to a time period are DATES (use a date_field on count_permits/search_permits), not statuses.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -89,7 +94,7 @@ TOOLS = [
                     "module": {"type": "string", "enum": ["BUSINESS TAX", "BUSINESS LICENSE", "BUILDING", "PUBLIC WORKS", "PLANNING", "PARKING", "HOUSING"],
                                "description": "high-level category; use 'BUSINESS TAX' for new businesses, 'BUSINESS LICENSE' for business licenses"},
                     "address": {"type": "string", "description": "street address to restrict the count to, e.g. '123 Main St'"},
-                    "date_field": {"type": "string", "enum": ["applied", "issued", "final", "updated", "created"]},
+                    "date_field": {"type": "string", "enum": ["applied", "issued", "final", "updated", "created", "expires"]},
                     "date_from": {"type": "string", "description": "YYYY-MM-DD / YYYY-MM / YYYY"},
                     "date_to": {"type": "string", "description": "YYYY-MM-DD / YYYY-MM / YYYY"},
                     "group_by": {"type": "string", "enum": ["status", "type", "department"]},
@@ -115,7 +120,7 @@ TOOLS = [
                     "module": {"type": "string", "enum": ["BUSINESS TAX", "BUSINESS LICENSE", "BUILDING", "PUBLIC WORKS", "PLANNING", "PARKING", "HOUSING"],
                                "description": "high-level category; 'BUSINESS TAX' for businesses, 'BUSINESS LICENSE' for business licenses"},
                     "query": {"type": "string", "description": "free-text keywords (applicant name, etc.)"},
-                    "date_field": {"type": "string", "enum": ["applied", "issued", "final", "updated", "created"]},
+                    "date_field": {"type": "string", "enum": ["applied", "issued", "final", "updated", "created", "expires"]},
                     "date_from": {"type": "string"},
                     "date_to": {"type": "string"},
                 },
