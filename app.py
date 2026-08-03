@@ -389,8 +389,8 @@ async def promptflow_request(request):
         logging.error(f"An error occurred while making promptflow_request: {e}")
 
 
-# Domain routing: permit and codes questions are rerouted to their dedicated indexes
-# so the dense municipal-code text can't drown out, or be drowned by, the other domains.
+# Domain routing (on-your-data fallback). Codes were merged into the code-pipeline index and are
+# answered by website_pipeline as 'website', so only permit records may route here (agent off).
 PERMITS_INDEX = os.environ.get("AZURE_SEARCH_INDEX_PERMITS")
 CODES_INDEX = os.environ.get("AZURE_SEARCH_INDEX_CODES")
 # Routing is OPT-IN: active only when BOTH domain indexes are configured. Apps without
@@ -399,9 +399,10 @@ INDEX_ROUTING_ENABLED = bool(PERMITS_INDEX and CODES_INDEX)
 
 ROUTER_SYSTEM_MESSAGE = (
     "You route a resident's question for a city government assistant to ONE data source. "
-    "Reply with exactly one lowercase word: website, permit, codes, or events.\n"
+    "Reply with exactly one lowercase word: website, permit, or events.\n"
     "- website: people, officials, departments, contacts, phone/email, hours, addresses, "
-    "city services, news, FAQs, general how-to questions, AND how to apply for or "
+    "city services, news, FAQs, general how-to questions, the municipal code / ordinances / "
+    "zoning / regulations themselves (what the code or law says), AND how to apply for or "
     "pay for a permit, permit fees, what documents are needed, which permit you need for a "
     "project, what permit types the city offers in general, and Building & Safety info.\n"
     "- permit: looking up SPECIFIC existing permit records, their status, or any COUNT, "
@@ -413,8 +414,6 @@ ROUTER_SYSTEM_MESSAGE = (
     "issued the most permits this year', 'how many new businesses opened in 2025'. Use for "
     "existing permit records and their aggregates, NOT for how to apply, fees, or what "
     "permit types exist in general.\n"
-    "- codes: the municipal code text, ordinances, or regulations themselves (zoning, "
-    "setbacks, what the code/law says).\n"
     "- events: anything on the City calendar. Upcoming City events, activities, festivals, "
     "programs, workshops, things to do, AND City Council / board / commission MEETING dates and "
     "times (e.g. 'when is the next city council meeting', 'next planning commission meeting'), "
@@ -425,7 +424,7 @@ ROUTER_SYSTEM_MESSAGE = (
 
 
 async def classify_domain(user_query, client, history=None):
-    """Return 'website' | 'permit' | 'codes'. Defaults to website on any failure.
+    """Return 'website' | 'permit' | 'events'. Defaults to website on any failure.
 
     If `history` (recent user/assistant turns, ending with the current question) is given,
     the classifier sees it so a short follow-up like 'at what locations?' inherits the topic
@@ -454,25 +453,39 @@ async def classify_domain(user_query, client, history=None):
         return "website"
     if "permit" in label:
         return "permit"
-    if "code" in label:
-        return "codes"
     if "event" in label:
         return "events"
-    return "website"
+    return "website"    # website also covers municipal-code / ordinance / zoning questions now
 
 
-async def route_index(user_query, client):
-    """Map the classified domain to an index name, or None to keep the default.
+def route_index(domain):
+    """Map an ALREADY-classified domain to a scoped on-your-data index, or None to keep the default.
 
-    When the permit AGENT is on, permit questions are handled by it (live records),
-    not by a RAG index, so this only routes codes here.
+    Codes were merged into the code-pipeline index (answered by website_pipeline as 'website'),
+    so they are no longer routed here. When the permit AGENT is on, permits are handled by it, so
+    in the common config this returns None for everything.
     """
-    domain = await classify_domain(user_query, client)
     if domain == "permit" and not PERMIT_AGENT_ENABLED:
         return PERMITS_INDEX
-    if domain == "codes":
-        return CODES_INDEX
     return None
+
+
+async def classify_request(request_body):
+    """Classify the latest question ONCE (website | permit | events) so the permit, events, website,
+    and index-routing paths share a single classifier call instead of each making their own. Returns
+    None (skip classifying) when no routable feature is enabled or there is no question."""
+    if not (PERMIT_AGENT_ENABLED or EVENTS_ENABLED or CODE_PIPELINE_ENABLED or INDEX_ROUTING_ENABLED):
+        return None
+    messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
+    user_query = _latest_user_query(messages)
+    if not user_query:
+        return None
+    try:
+        client = await init_openai_client()
+        return await classify_domain(user_query, client, history=_recent_history(messages))
+    except Exception:
+        logging.exception("domain classification failed; defaulting to website")
+        return "website"
 
 
 # --- Permit agent: answer existing-permit questions from the live records ---------
@@ -498,10 +511,10 @@ def _recent_history(messages, turns=6, max_chars=700):
     return [{"role": m["role"], "content": m["content"][:max_chars]} for m in recent[-turns:]]
 
 
-async def try_permit_answer(request_body):
+async def try_permit_answer(request_body, domain):
     """If the latest question is a permit-records question, answer it from the live
     permits index and return the answer string. Otherwise return None (run normal RAG)."""
-    if not PERMIT_AGENT_ENABLED:
+    if not PERMIT_AGENT_ENABLED or domain != "permit":
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
     user_query = _latest_user_query(messages)
@@ -510,8 +523,6 @@ async def try_permit_answer(request_body):
     try:
         client = await init_openai_client()
         history = _recent_history(messages)
-        if await classify_domain(user_query, client, history=history) != "permit":
-            return None
         logging.info("[PERMIT AGENT] handling: %s", user_query)
         return await permit_agent.answer_permit_query(
             user_query, client, app_settings.azure_openai.model, history=history)
@@ -525,15 +536,15 @@ async def try_permit_answer(request_body):
 EVENTS_ENABLED = bool(events_feed) and events_feed.available()
 
 
-async def try_events_answer(request_body):
+async def try_events_answer(request_body, domain):
     """If the classifier says EVENTS (upcoming events or a Council/board/commission meeting time),
     answer from the current events.json. Returns the answer string, or None to fall through to RAG."""
-    if not EVENTS_ENABLED:
+    if not EVENTS_ENABLED or domain != "events":
         return None
     try:
         client = await init_openai_client()
         user_query = _latest_user_query(request_body.get("messages", []))
-        if not user_query or await classify_domain(user_query, client) != "events":
+        if not user_query:
             return None
         logging.info("[EVENTS] handling: %s", user_query)
         return await events_feed.answer_events_query(
@@ -602,16 +613,17 @@ def website_stream_response(answer, context, history_metadata):
     return generate()
 
 
-async def try_website_answer(request_body):
+async def try_website_answer(request_body, domain):
     """If enabled and the classifier says WEBSITE, answer from burbank-code-v1 (hybrid + semantic
     rerank + in-depth prompt). Returns (answer, context) or None to fall through to on-your-data.
-    Routing is unchanged: codes/permit/meetings never reach here."""
-    if not CODE_PIPELINE_ENABLED:
+    Municipal-code questions now classify as WEBSITE and are answered here too; permit/meetings
+    never reach here."""
+    if not CODE_PIPELINE_ENABLED or domain != "website":
         return None
     try:
         client = await init_openai_client()
         q = _latest_user_query(request_body.get("messages", []))
-        if not q or await classify_domain(q, client) != "website":
+        if not q:
             return None
         logging.info("[CODE PIPELINE] website: %s", q)
         return await website_pipeline.answer_website_query(q, client, app_settings.azure_openai.model)
@@ -620,7 +632,7 @@ async def try_website_answer(request_body):
         return None
 
 
-async def send_chat_request(request_body, request_headers):
+async def send_chat_request(request_body, request_headers, domain=None):
     filtered_messages = []
     messages = request_body.get("messages", [])
     for message in messages:
@@ -635,11 +647,7 @@ async def send_chat_request(request_body, request_headers):
 
         # Route this question to the right scoped index (website stays default).
         if INDEX_ROUTING_ENABLED and app_settings.datasource and model_args.get("extra_body"):
-            user_query = next(
-                (m["content"] for m in reversed(filtered_messages) if m.get("role") == "user"),
-                None,
-            )
-            routed_index = await route_index(user_query, azure_openai_client)
+            routed_index = route_index(domain)
             if routed_index:
                 model_args["extra_body"]["data_sources"][0]["parameters"]["index_name"] = routed_index
                 logging.info(f"[ROUTED INDEX] {routed_index}")
@@ -666,31 +674,33 @@ async def complete_chat_request(request_body, request_headers):
         )
     else:
         history_metadata = request_body.get("history_metadata", {})
-        permit_answer = await try_permit_answer(request_body)
+        domain = await classify_request(request_body)      # classify ONCE; reused by every route
+        permit_answer = await try_permit_answer(request_body, domain)
         if permit_answer is not None:
             return permit_non_streaming_response(permit_answer, history_metadata)
-        events_answer = await try_events_answer(request_body)
+        events_answer = await try_events_answer(request_body, domain)
         if events_answer is not None:
             return permit_non_streaming_response(events_answer, history_metadata)
-        website = await try_website_answer(request_body)   # website -> code pipeline (if enabled)
+        website = await try_website_answer(request_body, domain)   # website/codes -> code pipeline
         if website is not None:
             return website_non_streaming_response(website[0], website[1], history_metadata)
-        response, apim_request_id = await send_chat_request(request_body, request_headers)
+        response, apim_request_id = await send_chat_request(request_body, request_headers, domain)
         return format_non_streaming_response(response, history_metadata, apim_request_id)
 
 
 async def stream_chat_request(request_body, request_headers):
     history_metadata = request_body.get("history_metadata", {})
-    permit_answer = await try_permit_answer(request_body)
+    domain = await classify_request(request_body)      # classify ONCE; reused by every route
+    permit_answer = await try_permit_answer(request_body, domain)
     if permit_answer is not None:
         return permit_stream_response(permit_answer, history_metadata)
-    events_answer = await try_events_answer(request_body)
+    events_answer = await try_events_answer(request_body, domain)
     if events_answer is not None:
         return permit_stream_response(events_answer, history_metadata)
-    website = await try_website_answer(request_body)   # website -> code pipeline (if enabled)
+    website = await try_website_answer(request_body, domain)   # website/codes -> code pipeline
     if website is not None:
         return website_stream_response(website[0], website[1], history_metadata)
-    response, apim_request_id = await send_chat_request(request_body, request_headers)
+    response, apim_request_id = await send_chat_request(request_body, request_headers, domain)
 
     async def generate():
         scrubber = BlockedTextScrubber()
