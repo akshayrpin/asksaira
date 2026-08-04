@@ -13,9 +13,44 @@ search service + code index from env (already present in the app settings).
 """
 
 import os
+import re
 from datetime import date
 
 import aiohttp
+
+# Generic signals that the resident wants the ordinance TEXT (not a service/how-to answer). When
+# absent, municipal-code chunks (source_category=="code") are demoted below the city's own pages so
+# an ordinance that merely shares vocabulary can't outrank the page that actually answers.
+_CODE_INTENT_RE = re.compile(
+    r"\b(codes?|ordinances?|municipal code|statutes?|zoning|setbacks?|"
+    r"what (?:does|do) the (?:code|law|ordinance))\b", re.I)
+
+
+def _is_code_query(query):
+    return bool(_CODE_INTENT_RE.search(query or ""))
+
+
+CODE_SLOTS = 2   # non-code queries: at most this many municipal-code chunks kept in the top-k
+
+
+def _demote_code(chunks, k):
+    """Non-code queries: only reorder when municipal code is FLOODING the natural top-k. If code
+    already holds <= CODE_SLOTS of the top-k it earned those slots, so leave the ranking untouched
+    (code that wasn't top-ranked is never promoted). If it floods, pull the city's own pages up and
+    keep at most CODE_SLOTS code chunks, so an ordinance still supports the answer without dominating
+    it. So 'how do I report weeds' leads with the 311 page yet still carries a little of the
+    ordinance, while a question where code merely ranked 2nd is left exactly as retrieval had it."""
+    top = chunks[:k]
+    code_in_top = [c for c in top if c.get("source_category") == "code"]
+    if len(code_in_top) <= CODE_SLOTS:
+        return top
+    site = [c for c in chunks if c.get("source_category") != "code"]
+    kept = code_in_top[:CODE_SLOTS]
+    out = site[:k - len(kept)] + kept
+    if len(out) < k:                                  # few website chunks in the pool -> backfill
+        seen = {c["id"] for c in out}
+        out += [c for c in chunks if c["id"] not in seen][:k - len(out)]
+    return out[:k]
 
 SEARCH_SVC = os.environ.get("AZURE_SEARCH_SERVICE", "")
 SEARCH_KEY = os.environ.get("AZURE_SEARCH_KEY", "")
@@ -39,6 +74,10 @@ SYSTEM = (
     "temporary bins or dumpsters, traffic), ALWAYS include the Public Works counter email "
     "pwonlinecounter@burbankca.gov, in addition to any more specific Public Works contact that "
     "appears in the sources.\n"
+    "- For a code-enforcement matter (reporting a property or nuisance violation), ALWAYS include "
+    "the City's code-enforcement reporting channel, 311.burbankca.gov and CodeEnf@burbankca.gov, in "
+    "addition to any more specific reporting contact in the sources. Do NOT route these to the "
+    "Public Works counter, even if an ordinance names Public Works for the abatement itself.\n"
     "- If the sources don't fully cover the question, answer what they do cover, say what's "
     "missing, and point to the closest relevant office or page.\n"
     "- Prefer the most recent/current information when sources differ.\n"
@@ -58,7 +97,7 @@ async def _retrieve(vector, query, k, candidates):
         "queryType": "semantic",
         "semanticConfiguration": SEM_CONFIG,
         "top": k,
-        "select": "id,content,title,url,breadcrumb,page_type,content_date",
+        "select": "id,content,title,url,breadcrumb,page_type,content_date,source_category",
     }
     url = f"https://{SEARCH_SVC}.search.windows.net/indexes/{CODE_INDEX}/docs/search?api-version={API}"
     async with aiohttp.ClientSession() as s:
@@ -68,10 +107,17 @@ async def _retrieve(vector, query, k, candidates):
     return data.get("value", []) or []
 
 
-async def answer_website_query(question, client, model, k=8, candidates=50):
+async def answer_website_query(question, client, model, k=8, candidates=50, pool=30):
     """Return (answer, context). context = {"citations":[...]} for the frontend."""
     emb = await client.embeddings.create(model=EMBED_MODEL, input=[question])
-    chunks = await _retrieve(emb.data[0].embedding, question, k, candidates)
+    chunks = await _retrieve(emb.data[0].embedding, question, pool, candidates)
+    if not _is_code_query(question):
+        # Demote municipal-code chunks below the city's own pages, keeping rerank order within each
+        # group, so an ordinance that merely shares vocabulary ("weeds") can't outrank the
+        # service/how-to page that actually answers. Code still ranks normally on code questions.
+        chunks = ([c for c in chunks if c.get("source_category") != "code"]
+                  + [c for c in chunks if c.get("source_category") == "code"])
+    chunks = chunks[:k]
 
     sources = "\n\n".join(
         f"[doc{i + 1}] {c.get('breadcrumb') or c.get('title', '')}  ({c.get('url', '')})\n{c.get('content', '')}"
