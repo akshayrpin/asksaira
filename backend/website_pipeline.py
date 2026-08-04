@@ -73,6 +73,9 @@ SYSTEM = (
     "- If the sources include a link to an online FORM the resident would need (application, "
     "request, registration, permit form, etc.), ALWAYS give that form's ACTUAL URL in the answer, "
     "not just its name, so they can open it directly.\n"
+    "- When the sources give separate contacts for different audiences or cases (e.g. residential "
+    "vs commercial, or by department or property type), include EACH one that applies; do not "
+    "substitute one channel (like a form link) for another audience's contact.\n"
     "- For any Public Works topic (streets, sidewalks, sewers/wastewater, trash/recycling, "
     "temporary bins or dumpsters, traffic), ALWAYS include the Public Works counter email "
     "pwonlinecounter@burbankca.gov, in addition to any more specific Public Works contact that "
@@ -83,11 +86,6 @@ SYSTEM = (
     "own service page.\n"
     "- If the sources don't fully cover the question, answer what they do cover, say what's "
     "missing, and point to the closest relevant office or page.\n"
-    "- Answer the SPECIFIC thing the resident asked. If the sources only support a related or "
-    "narrower case than the question (they asked about X, the sources describe Y), do NOT answer "
-    "'yes' to X: state plainly what the sources do and don't support and name the distinction, "
-    "instead of collapsing X and Y. If the exact thing asked isn't addressed by the sources, say "
-    "so rather than inferring a yes.\n"
     "- Prefer the most recent/current information when sources differ.\n"
     "- Today is {today}. Use this weekday and date exactly as given; never recompute the day "
     "of the week yourself. Sources may describe past events or expired terms. For any "
@@ -115,33 +113,72 @@ async def _retrieve(vector, query, k, candidates):
     return data.get("value", []) or []
 
 
-async def answer_website_query(question, client, model, k=8, candidates=50, pool=30):
-    """Return (answer, context). context = {"citations":[...]} for the frontend."""
+async def _page_chunks(page_url):
+    """Every chunk of one page (its parent document), for parent-document assembly. Same Azure AI
+    Search index as _retrieve, just FILTERED to the page instead of ranked."""
+    body = {
+        "search": "*",
+        "filter": "url eq '{}'".format((page_url or "").replace("'", "''")),
+        "top": 60,
+        "select": "content,breadcrumb,url,source_category",
+    }
+    u = f"https://{SEARCH_SVC}.search.windows.net/indexes/{CODE_INDEX}/docs/search?api-version={API}"
+    async with aiohttp.ClientSession() as s:
+        async with s.post(u, headers={"Content-Type": "application/json", "api-key": SEARCH_KEY},
+                          json=body) as r:
+            data = await r.json(content_type=None)
+    return data.get("value", []) or []
+
+
+async def answer_website_query(question, client, model, k=8, candidates=50, pool=30,
+                               page_char_cap=8000, total_char_cap=32000):
+    """Return (answer, context). Retrieve + demote to k hit chunks, then PARENT-DOCUMENT expand:
+    reassemble each hit's whole page (its hit chunks first, then the page's other chunks) so an
+    answer split across a page's chunks stays complete (e.g. a FAQ's contact line + its how-to
+    step). Sources become one block per page, capped so a long page can't blow up the context."""
     emb = await client.embeddings.create(model=EMBED_MODEL, input=[question])
     chunks = await _retrieve(emb.data[0].embedding, question, pool, candidates)
-    if not _is_code_query(question):
-        # Demote municipal-code chunks below the city's own pages, keeping rerank order within each
-        # group, so an ordinance that merely shares vocabulary ("weeds") can't outrank the
-        # service/how-to page that actually answers. Code still ranks normally on code questions.
-        chunks = ([c for c in chunks if c.get("source_category") != "code"]
-                  + [c for c in chunks if c.get("source_category") == "code"])
-    chunks = chunks[:k]
+    hits = chunks[:k] if _is_code_query(question) else _demote_code(chunks, k)
 
-    sources = "\n\n".join(
-        f"[doc{i + 1}] {c.get('breadcrumb') or c.get('title', '')}  ({c.get('url', '')})\n{c.get('content', '')}"
-        for i, c in enumerate(chunks)
-    )
+    # group the hit chunks by page (source_url), preserving hit-rank order
+    pages, hit_by_page = [], {}
+    for h in hits:
+        u = h.get("url", "")
+        if u not in hit_by_page:
+            pages.append(u)
+            hit_by_page[u] = {"breadcrumb": h.get("breadcrumb") or h.get("title") or "", "hits": []}
+        hit_by_page[u]["hits"].append(h)
+
+    blocks, citations, total = [], [], 0
+    for u in pages:
+        if total >= total_char_cap:
+            break
+        try:
+            siblings = await _page_chunks(u)
+        except Exception:
+            siblings = []                                  # degrade to just the hit chunks
+        seen, parts, used = set(), [], 0
+        for c in hit_by_page[u]["hits"] + siblings:        # hit chunks first, then rest of the page
+            text = (c.get("content") or "").strip()
+            key = text[:200]
+            if not text or key in seen:
+                continue
+            if parts and used + len(text) > page_char_cap:
+                break
+            seen.add(key); parts.append(text); used += len(text)
+        page_text = "\n\n".join(parts)
+        bc = hit_by_page[u]["breadcrumb"]
+        blocks.append(f"[doc{len(blocks) + 1}] {bc or u}  ({u})\n{page_text}")
+        citations.append({"content": page_text[:2000], "title": bc, "url": u,
+                          "filepath": bc or u, "chunk_id": str(len(citations))})
+        total += used
+
+    sources = "\n\n".join(blocks)
     resp = await client.chat.completions.create(
         model=model, temperature=0,
         messages=[{"role": "system", "content": SYSTEM.format(today=date.today().strftime("%A, %B %d, %Y (%Y-%m-%d)"))},
                   {"role": "user", "content": f"Question: {question}\n\nSources:\n{sources}"}])
     answer = (resp.choices[0].message.content or "").strip()
 
-    context = {"citations": [{
-        "content": c.get("content", ""),
-        "title": c.get("title", ""),
-        "url": c.get("url", ""),
-        "filepath": c.get("title", "") or c.get("url", ""),
-        "chunk_id": str(i),
-    } for i, c in enumerate(chunks)]}
+    context = {"citations": citations}
     return answer, context
