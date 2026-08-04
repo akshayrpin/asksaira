@@ -414,11 +414,13 @@ ROUTER_SYSTEM_MESSAGE = (
     "issued the most permits this year', 'how many new businesses opened in 2025'. Use for "
     "existing permit records and their aggregates, NOT for how to apply, fees, or what "
     "permit types exist in general.\n"
-    "- events: anything on the City calendar. Upcoming City events, activities, festivals, "
-    "programs, workshops, things to do, AND City Council / board / commission MEETING dates and "
-    "times (e.g. 'when is the next city council meeting', 'next planning commission meeting'), "
-    "'what's happening', 'this weekend', the events or meetings calendar. NOT permit or code "
-    "lookups.\n"
+    "- events: WHEN something is on the City calendar, its date, time, or schedule. Upcoming City "
+    "events, activities, festivals, programs, workshops, things to do, AND City Council / board / "
+    "commission MEETING dates and times (e.g. 'when is the next city council meeting', 'next "
+    "planning commission meeting'), 'what's happening', 'this weekend', the events or meetings "
+    "calendar. This covers only WHAT is scheduled and WHEN. A question about the DETAILS or "
+    "LOGISTICS of an event (street or road closures, parking, traffic, routes, rules, how to take "
+    "part) is NOT a calendar lookup, route those to website. NOT permit or code lookups.\n"
     "If you are unsure, answer website."
 )
 
