@@ -49,7 +49,7 @@ _STATUS_FILTER = "status:(" + " OR ".join(f'"{s}"' for s in ALLOWED_STATUSES) + 
 CODE_ENFORCEMENT_TYPE = "code enforcement"          # matched case-insensitively against `type`
 CODE_ENFORCEMENT_ACTIVE_STATUS = "Admin Pending"    # open cases ("Admin Completed" = closed); confirm with city
 CODE_ENFORCEMENT_FIELDS = ["act_nbr", "status", "type", "address", "applied_date"]  # For Burbank
-CODE_ENFORCEMENT_CONTACT = "For more information, contact Burbank Code Enforcement at (818) 238-5225."
+CODE_ENFORCEMENT_CONTACT = "For more information on the code enforcement permits, contact Burbank Code Enforcement at (818) 238-5225."
 
 
 def _is_code_enforcement(doc):
