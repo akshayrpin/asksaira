@@ -73,14 +73,18 @@ def _strip_html(s):
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", s or "").replace("&nbsp;", " ")).strip()
 
 
-def upcoming(today, days=60, limit=40):
+def upcoming(today, days=180):
+    # No item cap: the calendar holds only a few hundred events across the ingested horizon, so the
+    # whole upcoming window fits in context. A cap silently dropped later events (e.g. a DIG event
+    # past the 40th), making the model answer "no such event" when it actually existed. The window
+    # is wide enough (180 days) to cover the full ~4 months of events we ingest.
     out = []
     for e in _load():
         st = _local(_parse(e.get("start")))
         if st and today <= st.date() <= today + datetime.timedelta(days=days):
             out.append((st, e))
     out.sort(key=lambda x: x[0])
-    return [e for _, e in out[:limit]]
+    return [e for _, e in out]
 
 
 def _fmt(e):
