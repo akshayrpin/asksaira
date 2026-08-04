@@ -153,6 +153,25 @@
   overflow-x: auto;
 }
 
+.answerText table {
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+.answerText th,
+.answerText td {
+  border: 1px solid #d6d9de;
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.answerText thead th {
+  background: #f3f5f7;
+  font-weight: 700;
+}
+
 .answerText code {
   overflow-wrap: anywhere;
 }
