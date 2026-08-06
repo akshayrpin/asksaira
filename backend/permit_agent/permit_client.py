@@ -139,8 +139,23 @@ def _solr_dt(d, end=False):
 
 # --------------------------- Query Builder ---------------------------
 
+# Street-type suffixes (Dr/Drive, Rd/Road, St/Street...). The suffix a resident types is the
+# least reliable token, so if a strict address match finds nothing we retry with it dropped.
+_STREET_SUFFIXES = {"ST", "STREET", "AVE", "AV", "AVENUE", "BLVD", "BOULEVARD", "DR", "DRIVE",
+                    "RD", "ROAD", "LN", "LANE", "CT", "COURT", "PL", "PLACE", "WAY", "CIR",
+                    "CIRCLE", "TER", "TERRACE", "PKWY", "PARKWAY"}
+_SUFFIX_NOTE = ("No exact match on the street suffix, so these results are matched on the house "
+                "number and street name; please confirm the street type.")
+
+
+def _has_droppable_suffix(address):
+    """True if the address ends in a known street-type suffix we could relax on a retry."""
+    raw = [x for x in str(address or "").upper().split() if x]
+    return len(raw) > 2 and raw[-1] in _STREET_SUFFIXES
+
+
 def _fqs(type=None, status=None, department=None, module=None, address=None,
-         date_field="applied", date_from=None, date_to=None, renewal=None):
+         date_field="applied", date_from=None, date_to=None, renewal=None, drop_suffix=False):
     """Build the list of ('fq', clause) tuples for the given filters."""
     out = []
     if type:
@@ -164,7 +179,14 @@ def _fqs(type=None, status=None, department=None, module=None, address=None,
         # nothing about trailing format, so this holds for other indexes too. Whole-token
         # matching also pulls in unit sub-addresses ("201 E MAGNOLIA BLVD 145"), which a
         # plain exact match would miss.
-        toks = [t for t in (_esc(x) for x in str(address).upper().split()) if t]
+        raw = [x for x in str(address).upper().split() if x]
+        # Only when a strict match found nothing (drop_suffix): relax the trailing street-type
+        # suffix so a wrong/missing suffix ("Sunset Canyon Rd" vs the actual "Sunset Canyon Dr")
+        # still matches on house number + street name. Strict by default, so two same-named
+        # streets with different suffixes aren't silently conflated (especially on counts).
+        if drop_suffix and _has_droppable_suffix(address):
+            raw = raw[:-1]
+        toks = [t for t in (_esc(x) for x in raw) if t]
         for i, t in enumerate(toks):
             if i == 0 and t.isdigit():
                 out.append(("fq", f"address:{t}\\ *"))
@@ -331,13 +353,18 @@ async def count(group_by=None, **filters):
     if filters.get("status") and not isinstance(filters["status"], (list, tuple)):
         filters["status"] = await _resolve_status(
             filters["status"], type=filters.get("type"), module=filters.get("module"))
-    qp = [("q", "*"), ("rows", "0")] + _fqs(**filters)
     facet = None
     if group_by:
         gf = group_by if group_by in _FACET_FIELDS else "type"
         facet = {"g": {"type": "terms", "field": gf, "limit": 50, "sort": "count"}}
-    data = await _query(qp, facet)
+    data = await _query([("q", "*"), ("rows", "0")] + _fqs(**filters), facet)
+    broadened = False
+    if data["response"]["numFound"] == 0 and _has_droppable_suffix(filters.get("address")):
+        data = await _query([("q", "*"), ("rows", "0")] + _fqs(drop_suffix=True, **filters), facet)
+        broadened = data["response"]["numFound"] > 0
     out = {"count": data["response"]["numFound"]}
+    if broadened:
+        out["note"] = _SUFFIX_NOTE
     buckets = data.get("facets", {}).get("g", {}).get("buckets")
     if buckets is not None:
         out["breakdown"] = [{"value": b["val"], "count": b["count"]} for b in buckets]
@@ -358,8 +385,12 @@ async def search(query=None, **filters):
     else:
         q = "*"
     # Fetch 15: enough to have them all when total < 15, and to slice to 10 when total >= 15.
-    qp = [("q", q), ("rows", "15"), ("sort", "applied_date desc")] + _fqs(**filters)
-    data = await _query(qp)
+    base = [("q", q), ("rows", "15"), ("sort", "applied_date desc")]
+    data = await _query(base + _fqs(**filters))
+    broadened = False
+    if data["response"]["numFound"] == 0 and _has_droppable_suffix(filters.get("address")):
+        data = await _query(base + _fqs(drop_suffix=True, **filters))
+        broadened = data["response"]["numFound"] > 0
     resp = data["response"]
     total = resp["numFound"]
     docs = resp["docs"] if total < 15 else resp["docs"][:10]
@@ -368,8 +399,13 @@ async def search(query=None, **filters):
         "shown": len(docs),
         "results": [_summary_for(d) for d in docs],
     }
+    notes = []
+    if broadened:
+        notes.append(_SUFFIX_NOTE)
     if _has_code_enforcement(docs):
-        out["note"] = CODE_ENFORCEMENT_CONTACT
+        notes.append(CODE_ENFORCEMENT_CONTACT)
+    if notes:
+        out["note"] = " ".join(notes)
     return out
 
 
