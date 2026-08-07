@@ -14,9 +14,15 @@ search service + code index from env (already present in the app settings).
 
 import os
 import re
+import time
 from datetime import date
 
 import aiohttp
+
+try:
+    from backend import observability   # best-effort query tracing; None if unavailable
+except Exception:
+    observability = None
 
 # Generic signals that the resident wants the ordinance TEXT (not a service/how-to answer). When
 # absent, municipal-code chunks (source_category=="code") are demoted below the city's own pages so
@@ -135,6 +141,7 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
     reassemble each hit's whole page (its hit chunks first, then the page's other chunks) so an
     answer split across a page's chunks stays complete (e.g. a FAQ's contact line + its how-to
     step). Sources become one block per page, capped so a long page can't blow up the context."""
+    t0 = time.monotonic()
     emb = await client.embeddings.create(model=EMBED_MODEL, input=[question])
     chunks = await _retrieve(emb.data[0].embedding, question, pool, candidates)
     hits = chunks[:k] if _is_code_query(question) else _demote_code(chunks, k)
@@ -178,6 +185,16 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
         messages=[{"role": "system", "content": SYSTEM.format(today=date.today().strftime("%A, %B %d, %Y (%Y-%m-%d)"))},
                   {"role": "user", "content": f"Question: {question}\n\nSources:\n{sources}"}])
     answer = (resp.choices[0].message.content or "").strip()
+
+    if observability:                     # best-effort, non-blocking retrieval trace
+        observability.fire_and_forget({
+            "route": "website",
+            "question": question,
+            "retrieved": observability.website_retrieved(hits),
+            "answer": answer,
+            "latency_ms": int((time.monotonic() - t0) * 1000),
+            "model": model,
+        })
 
     context = {"citations": citations}
     return answer, context
