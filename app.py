@@ -404,7 +404,10 @@ ROUTER_SYSTEM_MESSAGE = (
     "city services, news, FAQs, general how-to questions, the municipal code / ordinances / "
     "zoning / regulations themselves (what the code or law says), AND how to apply for or "
     "pay for a permit, permit fees, what documents are needed, which permit you need for a "
-    "project, what permit types the city offers in general, and Building & Safety info.\n"
+    "project, what permit types the city offers in general, and Building & Safety info. "
+    'Examples: "how do I apply for a building permit", "how to apply for a permit online", '
+    '"what permit do I need for a fence", "what are the permit fees", "what documents do I '
+    'need for a permit".\n'
     "- permit: looking up SPECIFIC existing permit records, their status, or any COUNT, "
     "BREAKDOWN, LIST, or RANKING of permits actually filed or issued (this also covers "
     "business tax registrations and business licenses). Includes breakdowns by type, "
@@ -556,9 +559,11 @@ async def try_events_answer(request_body, domain):
         return None
 
 
-def _permit_message_obj():
+def _permit_message_obj(msg_id=None):
+    # unique per answer: the frontend echoes this response id as the message id (Chat.tsx),
+    # so a constant here makes every answer collide on one message doc (breaks feedback + history).
     return {
-        "id": "permit-agent",
+        "id": msg_id or str(uuid.uuid4()),
         "model": app_settings.azure_openai.model,
         "created": int(time.time()),
         "object": "extensions.chat.completion",
@@ -571,7 +576,7 @@ def permit_non_streaming_response(answer, history_metadata):
     obj = _permit_message_obj()
     obj["choices"][0]["messages"].append({"role": "assistant", "content": answer})
     obj["history_metadata"] = history_metadata
-    obj["apim-request-id"] = "permit-agent"
+    obj["apim-request-id"] = obj["id"]
     return obj
 
 
@@ -582,7 +587,7 @@ def permit_stream_response(answer, history_metadata):
         obj["object"] = "extensions.chat.completion.chunk"
         obj["choices"][0]["messages"].append({"role": "assistant", "content": answer})
         obj["history_metadata"] = history_metadata
-        obj["apim-request-id"] = "permit-agent"
+        obj["apim-request-id"] = obj["id"]
         yield obj
     return generate()
 
@@ -594,23 +599,21 @@ def _website_messages(answer, context):
             {"role": "assistant", "content": answer}]
 
 
-def website_non_streaming_response(answer, context, history_metadata):
-    obj = _permit_message_obj()
-    obj["id"] = "website-pipeline"
+def website_non_streaming_response(answer, context, history_metadata, answer_id=None):
+    obj = _permit_message_obj(answer_id)
     obj["choices"][0]["messages"] = _website_messages(answer, context)
     obj["history_metadata"] = history_metadata
-    obj["apim-request-id"] = "website-pipeline"
+    obj["apim-request-id"] = obj["id"]
     return obj
 
 
-def website_stream_response(answer, context, history_metadata):
+def website_stream_response(answer, context, history_metadata, answer_id=None):
     async def generate():
-        obj = _permit_message_obj()
+        obj = _permit_message_obj(answer_id)
         obj["object"] = "extensions.chat.completion.chunk"
-        obj["id"] = "website-pipeline"
         obj["choices"][0]["messages"] = _website_messages(answer, context)
         obj["history_metadata"] = history_metadata
-        obj["apim-request-id"] = "website-pipeline"
+        obj["apim-request-id"] = obj["id"]
         yield obj
     return generate()
 
@@ -628,7 +631,9 @@ async def try_website_answer(request_body, domain):
         if not q:
             return None
         logging.info("[CODE PIPELINE] website: %s", q)
-        return await website_pipeline.answer_website_query(q, client, app_settings.azure_openai.model)
+        # reuse the chat completion's own id (resp.id) as the response/message id, no invented uuid
+        return await website_pipeline.answer_website_query(
+            q, client, app_settings.azure_openai.model)
     except Exception:
         logging.exception("website pipeline failed; falling back to on-your-data")
         return None
@@ -685,7 +690,7 @@ async def complete_chat_request(request_body, request_headers):
             return permit_non_streaming_response(events_answer, history_metadata)
         website = await try_website_answer(request_body, domain)   # website/codes -> code pipeline
         if website is not None:
-            return website_non_streaming_response(website[0], website[1], history_metadata)
+            return website_non_streaming_response(website[0], website[1], history_metadata, website[2])
         response, apim_request_id = await send_chat_request(request_body, request_headers, domain)
         return format_non_streaming_response(response, history_metadata, apim_request_id)
 
@@ -701,7 +706,7 @@ async def stream_chat_request(request_body, request_headers):
         return permit_stream_response(events_answer, history_metadata)
     website = await try_website_answer(request_body, domain)   # website/codes -> code pipeline
     if website is not None:
-        return website_stream_response(website[0], website[1], history_metadata)
+        return website_stream_response(website[0], website[1], history_metadata, website[2])
     response, apim_request_id = await send_chat_request(request_body, request_headers, domain)
 
     async def generate():

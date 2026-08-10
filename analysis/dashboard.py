@@ -27,16 +27,47 @@ ACCOUNT = os.environ.get("AZURE_COSMOSDB_ACCOUNT", "")
 KEY = os.environ.get("AZURE_COSMOSDB_ACCOUNT_KEY", "")
 DATABASE = os.environ.get("AZURE_COSMOSDB_DATABASE", "")
 CONTAINER = os.environ.get("AZURE_COSMOSDB_TRACES_CONTAINER", "query_traces")
+CONV_CONTAINER = os.environ.get("AZURE_COSMOSDB_CONVERSATIONS_CONTAINER", "conversations")
 
 TAGS = ["untagged", "good", "missing-content", "mis-ranked", "stale", "wrong-answer", "other"]
+FEEDBACKS = ["all", "positive", "negative", "none"]
 
 
 @st.cache_resource
-def _container():
+def _client():
     # account key if provided (local dev), else managed identity / az-login (DefaultAzureCredential)
     cred = KEY or (DefaultAzureCredential() if DefaultAzureCredential else None)
-    client = CosmosClient(f"https://{ACCOUNT}.documents.azure.com:443/", credential=cred)
-    return client.get_database_client(DATABASE).get_container_client(CONTAINER)
+    return CosmosClient(f"https://{ACCOUNT}.documents.azure.com:443/", credential=cred)
+
+
+def _container():
+    return _client().get_database_client(DATABASE).get_container_client(CONTAINER)
+
+
+def _conv_container():
+    return _client().get_database_client(DATABASE).get_container_client(CONV_CONTAINER)
+
+
+def _fb_kind(v):
+    """Collapse the feedback enum (positive / negative / wrong_citation / ...) to a thumb."""
+    if not v or v == "neutral":
+        return None
+    return "positive" if v == "positive" else "negative"
+
+
+@st.cache_data(ttl=60)
+def _feedback_map():
+    """Rated assistant messages -> feedback, keyed by message id (== the trace's answer_id)."""
+    sql = ("SELECT c.id, c.feedback FROM c WHERE c.type='message' AND c.role='assistant' "
+           "AND IS_DEFINED(c.feedback) AND c.feedback != '' AND c.feedback != 'neutral'")
+    out = {}
+    try:
+        for m in _conv_container().query_items(sql, enable_cross_partition_query=True):
+            if m.get("id"):
+                out[m["id"]] = m.get("feedback")
+    except Exception:
+        pass
+    return out
 
 
 def _query(route, tag, text, limit):
@@ -76,12 +107,23 @@ with st.sidebar:
     st.header("Filters")
     route = st.selectbox("Route", ["all", "website", "permit", "events"])
     tag = st.selectbox("Tag", ["all"] + TAGS)
+    feedback = st.selectbox("Feedback", FEEDBACKS)
     text = st.text_input("Question contains")
     limit = st.slider("Max rows", 10, 500, 100, step=10)
     if st.button("Refresh"):
         st.rerun()
 
 rows = _query(route, tag, text, limit)
+
+# join user feedback (thumbs) by answer_id == the assistant message id
+fb_map = _feedback_map()
+for r in rows:
+    raw = fb_map.get(r.get("answer_id"))
+    r["_fb"], r["_fb_kind"] = raw, _fb_kind(raw)
+if feedback != "all":
+    want = None if feedback == "none" else feedback
+    rows = [r for r in rows if r.get("_fb_kind") == want]
+
 st.caption(f"{len(rows)} queries")
 
 if not rows:
@@ -96,7 +138,8 @@ with left:
     labels = {}
     for r in rows:
         badge = r.get("tag", "") or ""
-        labels[r["id"]] = f"[{r.get('route','?')}] {r.get('question','')[:60]}  {('· ' + badge) if badge else ''}"
+        thumb = {"positive": "👍", "negative": "👎"}.get(r.get("_fb_kind"), "")
+        labels[r["id"]] = f"{thumb} [{r.get('route','?')}] {r.get('question','')[:55]}  {('· ' + badge) if badge else ''}"
     chosen = st.radio("Select", list(labels), format_func=lambda i: labels[i], label_visibility="collapsed")
 
 sel = next((r for r in rows if r["id"] == chosen), None)
@@ -104,11 +147,13 @@ sel = next((r for r in rows if r["id"] == chosen), None)
 with right:
     if sel:
         st.subheader(sel.get("question", ""))
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric("Route", sel.get("route", "?"))
         c2.metric("Latency (ms)", sel.get("latency_ms", "—"))
         top = sel.get("retrieved") or []
         c3.metric("Chunks retrieved", len(top))
+        thumb = {"positive": "👍", "negative": "👎"}.get(sel.get("_fb_kind"))
+        c4.metric("User feedback", f"{thumb} {sel.get('_fb','')}" if thumb else "—")
 
         st.markdown("**Retrieved (in answer order, with scores)**")
         if top:

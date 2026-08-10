@@ -185,10 +185,12 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
         messages=[{"role": "system", "content": SYSTEM.format(today=date.today().strftime("%A, %B %d, %Y (%Y-%m-%d)"))},
                   {"role": "user", "content": f"Question: {question}\n\nSources:\n{sources}"}])
     answer = (resp.choices[0].message.content or "").strip()
+    answer_id = resp.id                   # the completion's own unique id, reused as the message id
 
     if observability:                     # best-effort, non-blocking retrieval trace
         observability.fire_and_forget({
             "route": "website",
+            "answer_id": answer_id,        # == the assistant message id, for the feedback join
             "question": question,
             "retrieved": observability.website_retrieved(hits),
             "answer": answer,
@@ -197,4 +199,4 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
         })
 
     context = {"citations": citations}
-    return answer, context
+    return answer, context, answer_id
