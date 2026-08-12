@@ -12,6 +12,8 @@ Reuses the app's Azure OpenAI client for both the query embedding and the answer
 search service + code index from env (already present in the app settings).
 """
 
+import asyncio
+import logging
 import os
 import re
 import time
@@ -135,6 +137,83 @@ async def _page_chunks(page_url):
     return data.get("value", []) or []
 
 
+# --------------------------- deterministic answer verification ---------------------------
+# The model regenerates URLs/contacts rather than copying them, so it can corrupt a document GUID
+# (one hex digit -> a 404) or emit a contact that isn't in the sources. These checks are pure
+# string work against the retrieved text (no network): repair URLs to the verbatim source URL,
+# and flag contacts that don't appear in the sources.
+_URL_RE = re.compile(r"https?://[^\s)\]]+")
+_MDLINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)]+)\)")
+_UUID_RE = re.compile(r"/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE_RE = re.compile(r"\(?\b\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}\b")
+
+
+def _strip_trail(u):
+    while u and u[-1] in ".,;:!?":
+        u = u[:-1]
+    return u
+
+
+def _url_identity(u):
+    """A URL's stable identity: drop the query string and any trailing UUID, so two URLs that differ
+    only in a corrupted document GUID (the LLM's typical URL error) map to the same identity."""
+    base = u.split("?", 1)[0]
+    m = _UUID_RE.search(base)
+    if m:
+        base = base[: m.start()]
+    return base.rstrip("/")
+
+
+def _repair_urls(answer, source_text):
+    """Replace every URL the model wrote with the VERBATIM URL from the sources. exact match -> keep;
+    same identity (same document, corrupted GUID/token) -> swap in the source URL; no source match
+    (fabricated) -> drop the link, keep the label text. Returns (fixed_answer, [(action,from,to)])."""
+    src_urls = [_strip_trail(u) for u in _URL_RE.findall(source_text)]
+    src_set = set(src_urls)
+    by_identity = {}
+    for s in src_urls:
+        by_identity.setdefault(_url_identity(s), s)
+    repairs = []
+
+    def _resolve(u):
+        if u in src_set:
+            return u
+        s = by_identity.get(_url_identity(u))
+        if s:
+            repairs.append(("repair", u, s))
+            return s
+        repairs.append(("drop", u, None))
+        return None
+
+    def _md(m):
+        r = _resolve(m.group(2))
+        return f"[{m.group(1)}]({r})" if r else m.group(1)
+    out = _MDLINK_RE.sub(_md, answer)
+
+    def _bare(m):
+        u, trail = m.group(0), ""
+        while u and u[-1] in ".,;:!?":
+            trail = u[-1] + trail
+            u = u[:-1]
+        r = _resolve(u)
+        return (r + trail) if r else trail
+    out = _URL_RE.sub(_bare, out)
+    return out, repairs
+
+
+def _check_contacts(answer, source_text):
+    """Flag emails/phones in the answer that don't appear in the sources (likely fabricated). We LOG
+    rather than delete: excising a contact from mid-sentence prose can mangle it, so these surface in
+    observability for review instead of being auto-removed."""
+    src_emails = {e.lower() for e in _EMAIL_RE.findall(source_text)}
+    src_phones = {re.sub(r"\D", "", p) for p in _PHONE_RE.findall(source_text)}
+    bad_emails = sorted({e for e in _EMAIL_RE.findall(answer) if e.lower() not in src_emails})
+    bad_phones = sorted({p for p in _PHONE_RE.findall(answer)
+                         if re.sub(r"\D", "", p) not in src_phones})
+    return {"unverified_emails": bad_emails, "unverified_phones": bad_phones}
+
+
 async def answer_website_query(question, client, model, k=8, candidates=50, pool=30,
                                page_char_cap=8000, total_char_cap=32000):
     """Return (answer, context). Retrieve + demote to k hit chunks, then PARENT-DOCUMENT expand:
@@ -155,14 +234,16 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
             hit_by_page[u] = {"breadcrumb": h.get("breadcrumb") or h.get("title") or "", "hits": []}
         hit_by_page[u]["hits"].append(h)
 
+    # Parent-document expansion for every hit page AT ONCE (was a sequential await per page, a big
+    # chunk of the latency). Each page's siblings are independent, so gather them concurrently.
+    sib_results = await asyncio.gather(*[_page_chunks(u) for u in pages], return_exceptions=True)
+    sib_by_page = {u: (s if not isinstance(s, Exception) else []) for u, s in zip(pages, sib_results)}
+
     blocks, citations, total = [], [], 0
     for u in pages:
         if total >= total_char_cap:
             break
-        try:
-            siblings = await _page_chunks(u)
-        except Exception:
-            siblings = []                                  # degrade to just the hit chunks
+        siblings = sib_by_page.get(u, [])                  # degrades to just the hit chunks on error
         seen, parts, used = set(), [], 0
         for c in hit_by_page[u]["hits"] + siblings:        # hit chunks first, then rest of the page
             text = (c.get("content") or "").strip()
@@ -187,6 +268,13 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
     answer = (resp.choices[0].message.content or "").strip()
     answer_id = resp.id                   # the completion's own unique id, reused as the message id
 
+    # Deterministic verification: repair model-mangled URLs against the sources, flag ungrounded
+    # contacts. Pure string work, no network.
+    answer, url_repairs = _repair_urls(answer, sources)
+    contact_flags = _check_contacts(answer, sources)
+    if url_repairs or contact_flags["unverified_emails"] or contact_flags["unverified_phones"]:
+        logging.info("[WEBSITE VERIFY] url_repairs=%s contacts=%s", url_repairs, contact_flags)
+
     if observability:                     # best-effort, non-blocking retrieval trace
         observability.fire_and_forget({
             "route": "website",
@@ -196,6 +284,8 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
             "answer": answer,
             "latency_ms": int((time.monotonic() - t0) * 1000),
             "model": model,
+            "url_repairs": url_repairs,     # [(action, from, to)] — fabricated/mangled links caught
+            "contact_flags": contact_flags, # ungrounded emails/phones surfaced for review
         })
 
     context = {"citations": citations}
