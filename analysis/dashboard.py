@@ -168,6 +168,29 @@ with right:
         st.markdown("**Answer**")
         st.write(sel.get("answer", ""))
 
+        # Deterministic verification results from website_pipeline (URLs repaired against the
+        # sources, ungrounded contacts flagged). Stored as lists once round-tripped through Cosmos.
+        reps = sel.get("url_repairs") or []
+        flags = sel.get("contact_flags") or {}
+        bad_em = flags.get("unverified_emails") or []
+        bad_ph = flags.get("unverified_phones") or []
+        if reps or bad_em or bad_ph:
+            st.markdown("**Verification**")
+            fixed = [r for r in reps if r and r[0] == "repair"]
+            dropped = [r for r in reps if r and r[0] == "drop"]
+            if fixed:
+                st.warning(f"{len(fixed)} link(s) repaired (model corrupted the URL)")
+                st.dataframe([{"from": r[1], "to": r[2]} for r in fixed],
+                             use_container_width=True, hide_index=True)
+            if dropped:
+                st.error(f"{len(dropped)} link(s) dropped (fabricated, not in sources)")
+                st.dataframe([{"url": r[1]} for r in dropped],
+                             use_container_width=True, hide_index=True)
+            if bad_em or bad_ph:
+                st.error("Ungrounded contacts flagged: " + ", ".join(bad_em + bad_ph))
+        else:
+            st.caption("Verification: no URL or contact issues.")
+
         st.divider()
         st.markdown("**Tag this query**")
         cur = sel.get("tag", "untagged") or "untagged"
