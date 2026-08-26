@@ -11,3 +11,7 @@ aiohttp==3.9.2
 gunicorn==20.1.0
 pydantic-settings==2.2.1
 tzdata
+# Application Insights request/dependency telemetry. The asgi instrumentation must stay
+# version-matched to the OTel packages the distro pins; bump them together if pip complains.
+azure-monitor-opentelemetry==1.6.4
+opentelemetry-instrumentation-asgi==0.48b0

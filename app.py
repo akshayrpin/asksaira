@@ -65,7 +65,24 @@ def create_app():
     app = Quart(__name__)
     app.register_blueprint(bp)
     app.config["TEMPLATES_AUTO_RELOAD"] = True
-    
+
+    # Application Insights: emit request + dependency telemetry so the Performance (p50/p95) and
+    # Failures blades populate. Only activates when APPLICATIONINSIGHTS_CONNECTION_STRING is set
+    # (Azure injects it via the bicep app setting); local runs without it are a no-op. The OTel
+    # distro auto-instruments Flask/FastAPI but not Quart, so we wrap the ASGI app by hand to get
+    # server spans. Runs once per gunicorn worker (no preload_app), where the exporter must live.
+    _appinsights_conn = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING")
+    if _appinsights_conn:
+        try:
+            from azure.monitor.opentelemetry import configure_azure_monitor
+            from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
+            configure_azure_monitor(connection_string=_appinsights_conn)
+            app.asgi_app = OpenTelemetryMiddleware(app.asgi_app)
+            logging.info("Application Insights instrumentation enabled.")
+        except Exception:
+            # Telemetry must never take the app down; degrade to no tracing.
+            logging.exception("App Insights instrumentation skipped")
+
     @app.before_serving
     async def init():
         try:
