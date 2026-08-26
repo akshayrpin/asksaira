@@ -20,6 +20,11 @@ import time
 from datetime import date
 
 import aiohttp
+try:
+    from opentelemetry import trace          # available via azure-monitor-opentelemetry
+    _tracer = trace.get_tracer("asksaira.website")
+except Exception:                             # otel not installed -> spans become no-ops
+    _tracer = None
 
 try:
     from backend import observability   # best-effort query tracing; None if unavailable
@@ -221,6 +226,7 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
     answer split across a page's chunks stays complete (e.g. a FAQ's contact line + its how-to
     step). Sources become one block per page, capped so a long page can't blow up the context."""
     t0 = time.monotonic()
+    _rspan = _tracer.start_span("website.retrieve") if _tracer else None
     emb = await client.embeddings.create(model=EMBED_MODEL, input=[question])
     chunks = await _retrieve(emb.data[0].embedding, question, pool, candidates)
     hits = chunks[:k] if _is_code_query(question) else _demote_code(chunks, k)
@@ -261,10 +267,20 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
         total += used
 
     sources = "\n\n".join(blocks)
+    retrieve_ms = int((time.monotonic() - t0) * 1000)
+    if _rspan:
+        _rspan.end()
+
+    _tg = time.monotonic()
+    _gspan = _tracer.start_span("website.generate") if _tracer else None
     resp = await client.chat.completions.create(
         model=model, temperature=0,
         messages=[{"role": "system", "content": SYSTEM.format(today=date.today().strftime("%A, %B %d, %Y (%Y-%m-%d)"))},
                   {"role": "user", "content": f"Question: {question}\n\nSources:\n{sources}"}])
+    generate_ms = int((time.monotonic() - _tg) * 1000)
+    if _gspan:
+        _gspan.end()
+    logging.info("[WEBSITE TIMING] retrieve_ms=%d generate_ms=%d", retrieve_ms, generate_ms)
     answer = (resp.choices[0].message.content or "").strip()
     answer_id = resp.id                   # the completion's own unique id, reused as the message id
 
@@ -283,6 +299,8 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
             "retrieved": observability.website_retrieved(hits),
             "answer": answer,
             "latency_ms": int((time.monotonic() - t0) * 1000),
+            "retrieve_ms": retrieve_ms,
+            "generate_ms": generate_ms,
             "model": model,
             "url_repairs": url_repairs,     # [(action, from, to)] — fabricated/mangled links caught
             "contact_flags": contact_flags, # ungrounded emails/phones surfaced for review
