@@ -50,36 +50,6 @@ const Chat = () => {
   const appStateContext = useContext(AppStateContext)
   const ui = appStateContext?.state.frontendSettings?.ui
   const AUTH_ENABLED = appStateContext?.state.frontendSettings?.auth_enabled
-  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 480)
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 480)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
-  const commonQuestions: string[] = [
-    ui?.example_option_1,
-    ui?.example_option_2,
-    ui?.example_option_3,
-    ui?.example_option_4
-  ].filter(Boolean) as string[]
-  
-  const displayCapabilities: string[] = [
-    ui?.capabilities_1,
-    ui?.capabilities_2,
-    ui?.capabilities_3,
-    ui?.capabilities_4,
-    ui?.capabilities_5
-  ].filter(Boolean) as string[]
-  
-  const displayGoodToKnow: string[] = [
-    ui?.limitations_1,
-    ui?.limitations_2,
-    ui?.limitations_3,
-    ui?.limitations_4
-  ].filter(Boolean) as string[]
-
   const chatMessageStreamEnd = useRef<HTMLDivElement | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [showLoadingMessage, setShowLoadingMessage] = useState<boolean>(false)
@@ -814,12 +784,6 @@ const Chat = () => {
     )
   }
 
-  const handleSendQuestion = (question: ChatMessage['content'], id?: string) => {
-    appStateContext?.state.isCosmosDBAvailable?.cosmosDB
-      ? makeApiRequestWithCosmosDB(question, id)
-      : makeApiRequestWithoutCosmosDB(question, id)
-  }
-
   return (
     <div className={styles.container} role="main">
       {showAuthMessage ? (
@@ -853,7 +817,7 @@ const Chat = () => {
         <Stack horizontal className={styles.chatRoot}>
           <div className={styles.chatContainer}>
             {!messages || messages.length < 1 ? (
-            /*  <div>
+              <div>
                 {ui?.chat_title && ui?.chat_title.length > 0 ? (
                   <Stack className={styles.chatEmptyState} style={{ alignItems: 'center' }}>
                     <img src={logo} className={styles.chatIcon} aria-hidden="true" />
@@ -876,69 +840,77 @@ const Chat = () => {
                     />
                     </Stack>
                   </Stack>
-                ) : (*/
-              <Stack className={styles.chatEmptyState}>
-                <section className={styles.landingCard}>
-                  <div className={styles.landingBrand}>
-                    <span className={styles.landingBrandIcon} aria-hidden="true">
-                      <img src={ui?.speaker_icon} alt="Icon" className={styles.aiSpeakerIcon}/> 
-                    </span>
-                    <span className={styles.landingBrandText}>{ui?.headertitle}</span>
+                ) : (
+                <Stack className={styles.chatEmptyState}>
+                  <div className={styles.aiContainer}>
+                    {ui?.hand_wave_icon && ui?.hand_wave_icon.length > 0 ? (
+                      <section className={styles.aiLabel}>
+                        <span>Hi there! 
+                        <img src={ui?.hand_wave_icon} alt="Icon" className={styles.aiWaveIcon}/> 
+                        {ui?.chat_description}</span>
+                      </section>
+                    ) : ( 
+                      <span>{ui?.chat_description}</span>
+                    )}
+                    <Stack horizontal className={styles.chatInputTop}>
+                      <QuestionInput
+                        clearOnSend
+                        placeholder="Type your question here..."
+                        disabled={isLoading}
+                        onSend={(question, id) => {
+                          appStateContext?.state.isCosmosDBAvailable?.cosmosDB
+                            ? makeApiRequestWithCosmosDB(question, id)
+                            : makeApiRequestWithoutCosmosDB(question, id)
+                        }}
+                        conversationId={
+                          appStateContext?.state.currentChat?.id ? appStateContext?.state.currentChat?.id : undefined
+                        }
+                        questionInputTop="Y"
+                      />
+                    </Stack>
+                    <section className={styles.aiQuestions}>
+                      <div className={styles.aiIconText}>
+                        <StackStarRegular className={[styles.aiIcon, styles.bgGreen].join(' ')}/>
+                        <span>{ui?.example_title}</span>
+                      </div>
+                      <div className={styles.aiQuestionGrid}>
+                        <button className={styles.aiQuestionOptions}>{ui?.example_option_1}</button>
+                        <button className={styles.aiQuestionOptions}>{ui?.example_option_2}</button>
+                        <button className={styles.aiQuestionOptions}>{ui?.example_option_3}</button>
+                      </div>
+                    </section>
+                    <section className={styles.aiCLContainer}>
+                      <div className={[styles.aiColumn, styles.aiCapabilitiesContainer].join(' ')}>
+                        <div className={styles.aiIconText}>
+                          <EmojiSparkleRegular className={[styles.aiIcon, styles.bgBlue].join(' ')} />
+                          <span>{ui?.capabilities}</span>
+                        </div>
+                        <div className={styles.aiCardCapabilities}>
+                          <ul>
+                            <li>{ui?.capabilities_1}</li>
+                            <li>{ui?.capabilities_2}</li>
+                            <li>{ui?.capabilities_3}</li>
+                          </ul>
+                        </div>
+                      </div>
+                      <div className={[styles.aiColumn, styles.aiLimitationsContainer].join(' ')}>
+                        <div className={styles.aiIconText}>
+                          <CommentDismissRegular className={[styles.aiIcon, styles.bgGray].join(' ')} />
+                          <span>{ui?.limitations}</span>
+                        </div>
+                        <div className={styles.aiCardLimitations}>
+                          <ul>
+                            <li>{ui?.limitations_1}</li>
+                            <li>{ui?.limitations_2}</li>
+                            <li>{ui?.limitations_3}</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </section>
                   </div>
-                  <h2 className={styles.landingTitle}>Hi there <img src={ui?.hand_wave_icon} alt="Icon" className={styles.aiWaveIcon}/>  {ui?.chat_description}</h2>
-                  <p className={styles.landingSubtitle}>{ui?.chat_subtitle}</p>
-
-                  <div className={styles.landingInputWrap}>
-                    <QuestionInput
-                      clearOnSend
-                      placeholder={isMobile ? 'Ask here...' : 'Ask about permits, utilities, parking, events, and more...'}
-                      disabled={isLoading}
-                      onSend={handleSendQuestion}
-                      conversationId={
-                        appStateContext?.state.currentChat?.id ? appStateContext?.state.currentChat?.id : undefined
-                      }
-                      questionInputTop="Y"
-                    />
-                  </div>
-
-                  <h3 className={styles.sectionHeading}>{ui?.example_title}</h3>
-                  <div className={styles.questionGrid}>
-                    {commonQuestions.map(question => (
-                      <button
-                        key={question}
-                        type="button"
-                        className={styles.questionCard}
-                        onClick={() => handleSendQuestion(question)}>
-                        {question}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section className={styles.infoGrid}>
-                  <article className={styles.infoCard}>
-                    <h3 className={styles.infoTitle}>{ui?.capabilities}</h3>
-                    <ul className={styles.infoList}>
-                      {displayCapabilities.map(item => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </article>
-                  <article className={styles.infoCard}>
-                    <h3 className={styles.infoTitle}>{ui?.limitations}</h3>
-                    <ul className={styles.infoList}>
-                      {displayGoodToKnow.map(item => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </article>
-                </section>
-
-                <div className={styles.landingPoweredBy}>
-                  <span className={styles.chatPoweredByText}>Powered by </span>
-                  <a href="https://www.sairasolutions.com/" target="_blank" rel="noreferrer" className={styles.chatPoweredByLink}>Saira Solutions</a>
-                </div>
-              </Stack>
+                </Stack>
+                )}
+              </div>
             ) : (
               <div className={styles.chatMessageStream} style={{ marginBottom: isLoading ? '40px' : '0px' }} role="log" ref={chatMessageStreamEnd} >
                 {messages.map((answer, index) => (
@@ -952,23 +924,21 @@ const Chat = () => {
                         </div>
                       </div>
                     ) : answer.role === 'assistant' ? (
-                      <>
-                        <div className={styles.chatMessageGpt}>
-                          <img src={ui?.chat_resp_logo} className={styles.chatIcon} aria-hidden="true" />                        
-                          {typeof answer.content === "string" && <Answer
-                            answer={{
-                              answer: parsemessage(answer.content),
-                              citations: parseCitationFromMessage(messages[index - 1]),
-                              generated_chart: parsePlotFromMessage(messages[index - 1]),
-                              message_id: answer.id,
-                              feedback: answer.feedback,
-                              exec_results: execResults
-                            }}
-                            onCitationClicked={c => onShowCitation(c)}
-                            onExectResultClicked={() => onShowExecResult(answerId)}
-                          />}
-                        </div>
-                      </>
+                      <div className={styles.chatMessageGpt}>
+                        <img src={ui?.chat_resp_logo} className={styles.chatIcon} aria-hidden="true" />                        
+                        {typeof answer.content === "string" && <Answer
+                          answer={{
+                            answer: parsemessage(answer.content),
+                            citations: parseCitationFromMessage(messages[index - 1]),
+                            generated_chart: parsePlotFromMessage(messages[index - 1]),
+                            message_id: answer.id,
+                            feedback: answer.feedback,
+                            exec_results: execResults
+                          }}
+                          onCitationClicked={c => onShowCitation(c)}
+                          onExectResultClicked={() => onShowExecResult(answerId)}
+                        />}
+                      </div>
                     ) : answer.role === ERROR ? (
                       <div className={styles.chatMessageError}>
                         <Stack horizontal className={styles.chatMessageErrorContent}>
@@ -1016,7 +986,7 @@ const Chat = () => {
                   </Stack>
                 )}
                 <Stack>
-                  {/* <CommandBarButton
+                  <CommandBarButton
                     role="button"
                     styles={{
                       icon: {
@@ -1047,7 +1017,7 @@ const Chat = () => {
                     }
                     disabled={disabledButton()}
                     aria-label="clear chat button"
-                  /> */}
+                  />
                   <Dialog
                     hidden={hideErrorDialog}
                     onDismiss={handleErrorDialogClose}
@@ -1056,18 +1026,18 @@ const Chat = () => {
                 </Stack>                
                 <QuestionInput
                   clearOnSend
-                  placeholder={isMobile ? 'Ask here...' : 'Ask about permits, utilities, parking, events, and more...'}
+                  placeholder="Type a new question..."
                   disabled={isLoading}
-                  onSend={handleSendQuestion}
+                  onSend={(question, id) => {
+                    appStateContext?.state.isCosmosDBAvailable?.cosmosDB
+                      ? makeApiRequestWithCosmosDB(question, id)
+                      : makeApiRequestWithoutCosmosDB(question, id)
+                  }}
                   conversationId={
                     appStateContext?.state.currentChat?.id ? appStateContext?.state.currentChat?.id : undefined
                   }
                   questionInputTop="N"
                 />
-                <div className={styles.chatPoweredBy}>
-                  <span className={styles.chatPoweredByText}>Powered by </span>
-                  <a href="https://www.sairasolutions.com/" target="_blank" rel="noreferrer" className={styles.chatPoweredByLink}>Saira Solutions</a>
-                </div>
               </Stack>              
             )}
           </div>
