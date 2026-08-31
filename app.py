@@ -487,12 +487,14 @@ async def classify_domain(user_query, client, history=None):
     except Exception:
         logging.exception("Domain classifier failed; defaulting to website")
         return "website"
+    # Fold any domain whose handler is disabled for this city back to "website" so it goes to the
+    # code pipeline, never the native on-your-data path (which may point at a different-dim index).
     if "zoning" in label:
-        return "zoning" if ZONING_ROUTE_ENABLED else "website"   # off -> code pipeline, as before
+        return "zoning" if ZONING_ROUTE_ENABLED else "website"
     if "permit" in label:
-        return "permit"
+        return "permit" if PERMIT_AGENT_ENABLED else "website"
     if "event" in label:
-        return "events"
+        return "events" if EVENTS_ENABLED else "website"
     return "website"    # website covers general municipal-code / ordinance questions
 
 
