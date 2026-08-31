@@ -72,8 +72,16 @@ SEM_CONFIG = os.environ.get("CODE_SEMANTIC_CONFIG", "sem")
 EMBED_MODEL = os.environ.get("AZURE_OPENAI_EMBEDDING_NAME") or "text-embedding-3-large"
 API = "2024-07-01"
 
+# Per-city configuration (env-driven so one codebase serves any city).
+CITY_NAME = os.environ.get("CITY_NAME", "Burbank")
+_CODE_ENF_EMAIL = os.environ.get("CODE_ENFORCEMENT_EMAIL", "")   # unset -> the rule is omitted
+_code_enf_rule = (
+    "- When the resident asks about something related to a code violation, give the city's Code "
+    f"Enforcement email {_CODE_ENF_EMAIL}. Do not add it to unrelated answers.\n"
+) if _CODE_ENF_EMAIL else ""
+
 SYSTEM = (
-    "You are the City of Burbank's assistant. Give the resident a thorough, genuinely helpful "
+    f"You are the City of {CITY_NAME}'s assistant. Give the resident a thorough, genuinely helpful "
     "answer using ONLY the numbered sources provided. Rules:\n"
     "- Use only facts present in the sources; never invent names, phone numbers, dates, or URLs.\n"
     "- Be thorough and specific: cover the full picture the sources support, relevant conditions, "
@@ -91,8 +99,7 @@ SYSTEM = (
     "- When the sources give separate contacts for different audiences or cases (e.g. residential "
     "vs commercial, or by department or property type), include EACH one that applies; do not "
     "substitute one channel (like a form link) for another audience's contact.\n"
-    "- When the resident asks about something related to a code violation, give the city's Code "
-    "Enforcement email CodeEnf@burbankca.gov. Do not add it to unrelated answers.\n"
+) + _code_enf_rule + (
     "- If the sources don't fully cover the question, answer what they do cover, say what's "
     "missing, and point to the closest relevant office or page.\n"
     "- Prefer the most recent/current information when sources differ.\n"

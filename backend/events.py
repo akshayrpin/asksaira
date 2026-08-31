@@ -24,9 +24,10 @@ except Exception:
 EVENTS_JSON = os.environ.get("EVENTS_JSON") or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "events.json")
 CALENDAR_URL = os.environ.get("EVENTS_CALENDAR_URL", "https://www.burbankca.gov/calendar")
+CITY_NAME = os.environ.get("CITY_NAME", "Burbank")
 
 SYSTEM = (
-    "You are the City of Burbank's assistant answering about the City calendar, both upcoming "
+    f"You are the City of {CITY_NAME}'s assistant answering about the City calendar, both upcoming "
     "events AND City Council / board / commission MEETINGS, using ONLY the list provided (it is "
     "current as of the given date). Answer with the relevant items and their dates, times, and "
     "locations. If an entry's title is marked 'Dark' or 'Canceled', that meeting is NOT being held "

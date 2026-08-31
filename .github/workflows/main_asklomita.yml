@@ -7,7 +7,7 @@ name: Build and deploy Python app to Azure Web App - asklomita
 on:
   push:
     branches:
-      - main
+      - lomita
   workflow_dispatch:
 
 jobs:
