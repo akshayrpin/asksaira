@@ -56,6 +56,13 @@ except Exception:
     logging.exception("website pipeline unavailable; website questions use on-your-data")
 CODE_PIPELINE_ENABLED = bool(website_pipeline) and os.environ.get("CODE_PIPELINE_ENABLED", "0") != "0"
 
+try:  # address-specific zoning / land-use answers (answered from the code index); opt-in
+    from backend import zoning
+except Exception:
+    zoning = None
+    logging.exception("zoning route unavailable")
+ZONING_ROUTE_ENABLED = bool(zoning) and os.environ.get("ZONING_ROUTE_ENABLED", "0") != "0"
+
 bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
 
 cosmos_db_ready = asyncio.Event()
@@ -416,7 +423,7 @@ INDEX_ROUTING_ENABLED = bool(PERMITS_INDEX and CODES_INDEX)
 
 ROUTER_SYSTEM_MESSAGE = (
     "You route a resident's question for a city government assistant to ONE data source. "
-    "Reply with exactly one lowercase word: website, permit, or events.\n"
+    "Reply with exactly one lowercase word: website, permit, events, or zoning.\n"
     "- website: people, officials, departments, contacts, phone/email, hours, addresses, "
     "city services, news, FAQs, general how-to questions, the municipal code / ordinances / "
     "zoning / regulations themselves (what the code or law says), AND how to apply for or "
@@ -441,6 +448,12 @@ ROUTER_SYSTEM_MESSAGE = (
     "calendar. This covers only WHAT is scheduled and WHEN. A question about the DETAILS or "
     "LOGISTICS of an event (street or road closures, parking, traffic, routes, rules, how to take "
     "part) is NOT a calendar lookup, route those to website. NOT permit or code lookups.\n"
+    "- zoning: whether a specific USE is allowed at a specific PROPERTY/ADDRESS or in a specific "
+    "zoning designation. Use for 'can I open/build/operate a [use] at [address]', 'is a [use] "
+    "allowed in [zone]', 'what can I do with the property at [address]', and short follow-ups that "
+    "supply a zoning designation (e.g. 'zoning is C-3', 'it's C-3', or just 'C-3', 'R-1', 'MDC-3') "
+    "answering an earlier land-use question. About a SPECIFIC property or zone, NOT a general "
+    "question about what the code says (that is website).\n"
     "If you are unsure, answer website."
 )
 
@@ -473,11 +486,13 @@ async def classify_domain(user_query, client, history=None):
     except Exception:
         logging.exception("Domain classifier failed; defaulting to website")
         return "website"
+    if "zoning" in label:
+        return "zoning" if ZONING_ROUTE_ENABLED else "website"   # off -> code pipeline, as before
     if "permit" in label:
         return "permit"
     if "event" in label:
         return "events"
-    return "website"    # website also covers municipal-code / ordinance / zoning questions now
+    return "website"    # website also covers general municipal-code / ordinance questions
 
 
 def route_index(domain):
@@ -496,7 +511,8 @@ async def classify_request(request_body):
     """Classify the latest question ONCE (website | permit | events) so the permit, events, website,
     and index-routing paths share a single classifier call instead of each making their own. Returns
     None (skip classifying) when no routable feature is enabled or there is no question."""
-    if not (PERMIT_AGENT_ENABLED or EVENTS_ENABLED or CODE_PIPELINE_ENABLED or INDEX_ROUTING_ENABLED):
+    if not (PERMIT_AGENT_ENABLED or EVENTS_ENABLED or CODE_PIPELINE_ENABLED
+            or INDEX_ROUTING_ENABLED or ZONING_ROUTE_ENABLED):
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
     user_query = _latest_user_query(messages)
@@ -635,6 +651,26 @@ def website_stream_response(answer, context, history_metadata, answer_id=None):
     return generate()
 
 
+async def try_zoning_answer(request_body, domain):
+    """Address-specific zoning / land-use questions -> answered from the code index with a zoning
+    prompt (asks for the designation if absent, else answers from the code). Returns website_pipeline's
+    (answer, context, answer_id) or None to fall through."""
+    if not ZONING_ROUTE_ENABLED or domain != "zoning":
+        return None
+    messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
+    q = _latest_user_query(messages)
+    if not q:
+        return None
+    try:
+        client = await init_openai_client()
+        logging.info("[ZONING] %s", q)
+        return await zoning.answer_zoning_query(
+            q, client, app_settings.azure_openai.model, history=_recent_history(messages))
+    except Exception:
+        logging.exception("zoning route failed; falling back")
+        return None
+
+
 async def try_website_answer(request_body, domain):
     """If enabled and the classifier says WEBSITE, answer from burbank-code-v1 (hybrid + semantic
     rerank + in-depth prompt). Returns (answer, context) or None to fall through to on-your-data.
@@ -705,6 +741,9 @@ async def complete_chat_request(request_body, request_headers):
         events_answer = await try_events_answer(request_body, domain)
         if events_answer is not None:
             return permit_non_streaming_response(events_answer, history_metadata)
+        zoning_answer = await try_zoning_answer(request_body, domain)
+        if zoning_answer is not None:
+            return website_non_streaming_response(zoning_answer[0], zoning_answer[1], history_metadata, zoning_answer[2])
         website = await try_website_answer(request_body, domain)   # website/codes -> code pipeline
         if website is not None:
             return website_non_streaming_response(website[0], website[1], history_metadata, website[2])
@@ -721,6 +760,9 @@ async def stream_chat_request(request_body, request_headers):
     events_answer = await try_events_answer(request_body, domain)
     if events_answer is not None:
         return permit_stream_response(events_answer, history_metadata)
+    zoning_answer = await try_zoning_answer(request_body, domain)
+    if zoning_answer is not None:
+        return website_stream_response(zoning_answer[0], zoning_answer[1], history_metadata, zoning_answer[2])
     website = await try_website_answer(request_body, domain)   # website/codes -> code pipeline
     if website is not None:
         return website_stream_response(website[0], website[1], history_metadata, website[2])

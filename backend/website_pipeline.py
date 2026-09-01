@@ -220,16 +220,18 @@ def _check_contacts(answer, source_text):
 
 
 async def answer_website_query(question, client, model, k=8, candidates=50, pool=30,
-                               page_char_cap=8000, total_char_cap=32000):
+                               page_char_cap=8000, total_char_cap=32000,
+                               system=None, retrieval_query=None):
     """Return (answer, context). Retrieve + demote to k hit chunks, then PARENT-DOCUMENT expand:
     reassemble each hit's whole page (its hit chunks first, then the page's other chunks) so an
     answer split across a page's chunks stays complete (e.g. a FAQ's contact line + its how-to
     step). Sources become one block per page, capped so a long page can't blow up the context."""
     t0 = time.monotonic()
     _rspan = _tracer.start_span("website.retrieve") if _tracer else None
-    emb = await client.embeddings.create(model=EMBED_MODEL, input=[question])
-    chunks = await _retrieve(emb.data[0].embedding, question, pool, candidates)
-    hits = chunks[:k] if _is_code_query(question) else _demote_code(chunks, k)
+    rq = retrieval_query or question          # zoning passes a conversation-derived retrieval query
+    emb = await client.embeddings.create(model=EMBED_MODEL, input=[rq])
+    chunks = await _retrieve(emb.data[0].embedding, rq, pool, candidates)
+    hits = chunks[:k] if _is_code_query(rq) else _demote_code(chunks, k)
 
     # group the hit chunks by page (source_url), preserving hit-rank order
     pages, hit_by_page = [], {}
@@ -275,7 +277,7 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
     _gspan = _tracer.start_span("website.generate") if _tracer else None
     resp = await client.chat.completions.create(
         model=model, temperature=0,
-        messages=[{"role": "system", "content": SYSTEM.format(today=date.today().strftime("%A, %B %d, %Y (%Y-%m-%d)"))},
+        messages=[{"role": "system", "content": (system or SYSTEM).format(today=date.today().strftime("%A, %B %d, %Y (%Y-%m-%d)"))},
                   {"role": "user", "content": f"Question: {question}\n\nSources:\n{sources}"}])
     generate_ms = int((time.monotonic() - _tg) * 1000)
     if _gspan:
