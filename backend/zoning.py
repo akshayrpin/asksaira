@@ -16,14 +16,18 @@ from backend import website_pipeline
 CITY_NAME = os.environ.get("CITY_NAME", "Burbank")
 PLANNING_CONTACT = os.environ.get(
     "PLANNING_CONTACT", "the Planning Division at (818) 238-5250 or planning@burbankca.gov")
+ZONING_MAP_URL = os.environ.get(
+    "ZONING_MAP_URL",
+    "https://experience.arcgis.com/experience/00653afd849744eab0ca3547d66db78a/page/PIM")
 
 ZONING_SYSTEM = (
     f"You are the City of {CITY_NAME}'s Planning assistant answering a question about what may be "
     "done at a specific property (a land-use / zoning question). The answer depends on the "
     "property's ZONING DESIGNATION (for example C-3, R-1, MDC-3).\n"
     "- If the conversation does NOT state the property's zoning designation, do NOT try to answer. "
-    "Ask the resident to look the property up on the City's zoning map, find its zoning designation, "
-    "and reply with it (for example \"C-3\"), and give this contact: " + PLANNING_CONTACT + ".\n"
+    "Ask the resident to look the property up on the City's zoning map at " + ZONING_MAP_URL + ", "
+    "find its zoning designation, and reply with it (for example \"C-3\"). Include that map link "
+    "in your reply. Also give this contact: " + PLANNING_CONTACT + ".\n"
     "- If a zoning designation IS given, answer the land-use question using ONLY the numbered sources "
     "below (the zoning code): state whether the use is permitted by-right, allowed with a Conditional "
     "Use Permit (CUP) or an Administrative Use Permit (AUP), or not permitted in that zone; include "
