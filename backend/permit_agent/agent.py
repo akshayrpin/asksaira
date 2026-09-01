@@ -143,6 +143,26 @@ TOOLS = [
 ]
 
 
+def _default_module(args):
+    """Deterministic default: a general permit query (no permit type AND no module named) is scoped
+    to BUILDING permits. If the model already set a type (e.g. Solar) or a module (e.g. BUSINESS
+    TAX, so business/code-enforcement/etc. are untouched), keep what it chose."""
+    module = args.get("module")
+    if not module and not args.get("type"):
+        return "BUILDING"
+    return module
+
+
+def _note_default(res, args, module):
+    """When we defaulted a general query to building permits, tell the user (the model includes a
+    result 'note' verbatim). Only when the default actually kicked in and no other note is set."""
+    if (module == "BUILDING" and not args.get("module") and not args.get("type")
+            and isinstance(res, dict) and "note" not in res):
+        res["note"] = ("These figures are for building permits. If you meant a specific permit "
+                       "type or another category (business, code enforcement, etc.), let me know.")
+    return res
+
+
 async def _dispatch(name, args):
     if name == "find_permit_type":
         return {"matches": await pc.find_permit_type(args.get("keyword", ""))}
@@ -150,22 +170,26 @@ async def _dispatch(name, args):
         return {"matches": await pc.find_permit_status(
             args.get("keyword", ""), type=args.get("type"), module=args.get("module"))}
     if name == "count_permits":
+        module = _default_module(args)
         status = pc.ACTIVE_BUSINESS_STATUSES if args.get("business_active") else args.get("status")
-        return await pc.count(
+        res = await pc.count(
             type=args.get("type"), status=status, department=args.get("department"),
-            module=args.get("module"), address=args.get("address"),
+            module=module, address=args.get("address"),
             date_field=args.get("date_field", "applied"),
             date_from=args.get("date_from"), date_to=args.get("date_to"),
             renewal=args.get("renewal"),
             group_by=args.get("group_by"),
         )
+        return _note_default(res, args, module)
     if name == "search_permits":
-        return await pc.search(
+        module = _default_module(args)
+        res = await pc.search(
             query=args.get("query"), address=args.get("address"),
-            type=args.get("type"), status=args.get("status"), module=args.get("module"),
+            type=args.get("type"), status=args.get("status"), module=module,
             date_field=args.get("date_field", "applied"),
             date_from=args.get("date_from"), date_to=args.get("date_to"),
         )
+        return _note_default(res, args, module)
     if name == "get_permit":
         return await pc.get_permit(args.get("act_nbr", ""))
     return {"error": f"unknown tool {name}"}
