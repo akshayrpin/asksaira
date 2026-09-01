@@ -275,9 +275,10 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
 
     _tg = time.monotonic()
     _gspan = _tracer.start_span("website.generate") if _tracer else None
+    sys_text = (system or SYSTEM).format(today=date.today().strftime("%A, %B %d, %Y (%Y-%m-%d)"))
     resp = await client.chat.completions.create(
         model=model, temperature=0,
-        messages=[{"role": "system", "content": (system or SYSTEM).format(today=date.today().strftime("%A, %B %d, %Y (%Y-%m-%d)"))},
+        messages=[{"role": "system", "content": sys_text},
                   {"role": "user", "content": f"Question: {question}\n\nSources:\n{sources}"}])
     generate_ms = int((time.monotonic() - _tg) * 1000)
     if _gspan:
@@ -287,9 +288,12 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
     answer_id = resp.id                   # the completion's own unique id, reused as the message id
 
     # Deterministic verification: repair model-mangled URLs against the sources, flag ungrounded
-    # contacts. Pure string work, no network.
-    answer, url_repairs = _repair_urls(answer, sources)
-    contact_flags = _check_contacts(answer, sources)
+    # contacts. Pure string work, no network. Verify against the sources AND the system prompt, so a
+    # URL/contact the prompt itself supplies (e.g. the zoning-map link, a department email) is treated
+    # as grounded and not stripped.
+    grounding = sources + "\n" + sys_text
+    answer, url_repairs = _repair_urls(answer, grounding)
+    contact_flags = _check_contacts(answer, grounding)
     if url_repairs or contact_flags["unverified_emails"] or contact_flags["unverified_phones"]:
         logging.info("[WEBSITE VERIFY] url_repairs=%s contacts=%s", url_repairs, contact_flags)
 
