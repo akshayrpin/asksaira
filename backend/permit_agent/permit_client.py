@@ -51,6 +51,10 @@ CODE_ENFORCEMENT_ACTIVE_STATUS = "Admin Pending"    # open cases ("Admin Complet
 CODE_ENFORCEMENT_FIELDS = ["act_nbr", "status", "type", "address", "applied_date"]  # For Burbank
 CODE_ENFORCEMENT_CONTACT = "For more information on the code enforcement permits, contact Burbank Code Enforcement at (818) 238-5225."
 
+# "Building permits" = module BUILDING minus these admin/enforcement types (per ePALS "Is Building
+# Permit" catalog). Used as the deterministic default scope for general permit questions.
+NON_BUILDING_TYPES = ["Building Administration", "Code Enforcement", "Zoning Verification"]
+
 
 def _is_code_enforcement(doc):
     return str(doc.get("type", "")).strip().lower() == CODE_ENFORCEMENT_TYPE
@@ -155,11 +159,14 @@ def _has_droppable_suffix(address):
 
 
 def _fqs(type=None, status=None, department=None, module=None, address=None,
-         date_field="applied", date_from=None, date_to=None, renewal=None, drop_suffix=False):
+         date_field="applied", date_from=None, date_to=None, renewal=None, drop_suffix=False,
+         exclude_types=None):
     """Build the list of ('fq', clause) tuples for the given filters."""
     out = []
     if type:
         out.append(("fq", f'type:"{type}"'))
+    if exclude_types:                # drop these type values (used by the building-permit default)
+        out.append(("fq", "-type:(" + " OR ".join(f'"{t}"' for t in exclude_types) + ")"))
     if status:                       # str -> one status; list/tuple -> OR-match several
         if isinstance(status, (list, tuple)):
             out.append(("fq", "status:(" + " OR ".join(f'"{s}"' for s in status) + ")"))

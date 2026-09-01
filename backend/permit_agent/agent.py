@@ -143,23 +143,23 @@ TOOLS = [
 ]
 
 
-def _default_module(args):
+def _building_scope(args):
     """Deterministic default: a general permit query (no permit type AND no module named) is scoped
-    to BUILDING permits. If the model already set a type (e.g. Solar) or a module (e.g. BUSINESS
-    TAX, so business/code-enforcement/etc. are untouched), keep what it chose."""
-    module = args.get("module")
-    if not module and not args.get("type"):
-        return "BUILDING"
-    return module
+    to BUILDING PERMITS = module BUILDING minus the admin/enforcement types (Building Administration,
+    Code Enforcement, Zoning Verification). Returns (module, exclude_types, defaulted). If the model
+    set a type (e.g. Solar) or a module (business, etc.), leave its choice untouched."""
+    if not args.get("module") and not args.get("type"):
+        return "BUILDING", pc.NON_BUILDING_TYPES, True
+    return args.get("module"), None, False
 
 
-def _note_default(res, args, module):
-    """When we defaulted a general query to building permits, tell the user (the model includes a
-    result 'note' verbatim). Only when the default actually kicked in and no other note is set."""
-    if (module == "BUILDING" and not args.get("module") and not args.get("type")
-            and isinstance(res, dict) and "note" not in res):
-        res["note"] = ("These figures are for building permits. If you meant a specific permit "
-                       "type or another category (business, code enforcement, etc.), let me know.")
+def _note_building(res, defaulted):
+    """When we defaulted to building permits, tell the user (the model includes a result 'note'
+    verbatim). Appends to any existing note rather than dropping it."""
+    if defaulted and isinstance(res, dict):
+        note = ("These figures are for building permits. For a specific permit type or another "
+                "category (business, code enforcement, etc.), just ask.")
+        res["note"] = f'{res["note"]} {note}' if res.get("note") else note
     return res
 
 
@@ -170,26 +170,27 @@ async def _dispatch(name, args):
         return {"matches": await pc.find_permit_status(
             args.get("keyword", ""), type=args.get("type"), module=args.get("module"))}
     if name == "count_permits":
-        module = _default_module(args)
+        module, exclude_types, defaulted = _building_scope(args)
         status = pc.ACTIVE_BUSINESS_STATUSES if args.get("business_active") else args.get("status")
         res = await pc.count(
             type=args.get("type"), status=status, department=args.get("department"),
-            module=module, address=args.get("address"),
+            module=module, exclude_types=exclude_types, address=args.get("address"),
             date_field=args.get("date_field", "applied"),
             date_from=args.get("date_from"), date_to=args.get("date_to"),
             renewal=args.get("renewal"),
             group_by=args.get("group_by"),
         )
-        return _note_default(res, args, module)
+        return _note_building(res, defaulted)
     if name == "search_permits":
-        module = _default_module(args)
+        module, exclude_types, defaulted = _building_scope(args)
         res = await pc.search(
             query=args.get("query"), address=args.get("address"),
-            type=args.get("type"), status=args.get("status"), module=module,
+            type=args.get("type"), status=args.get("status"),
+            module=module, exclude_types=exclude_types,
             date_field=args.get("date_field", "applied"),
             date_from=args.get("date_from"), date_to=args.get("date_to"),
         )
-        return _note_default(res, args, module)
+        return _note_building(res, defaulted)
     if name == "get_permit":
         return await pc.get_permit(args.get("act_nbr", ""))
     return {"error": f"unknown tool {name}"}
