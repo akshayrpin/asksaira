@@ -63,6 +63,20 @@ except Exception:
     logging.exception("zoning route unavailable")
 ZONING_ROUTE_ENABLED = bool(zoning) and os.environ.get("ZONING_ROUTE_ENABLED", "0") != "0"
 
+# Arrest / police daily-log deflect. The logs update daily and can't be re-pushed that often, and
+# the model won't reliably stop enumerating/inventing per-day dates from a prompt rule, so answer
+# DETERMINISTICALLY: the classifier only routes here, the reply is fixed text (no LLM generation,
+# no retrieval), which is why it can never fabricate dates or log contents. Env-configurable.
+ARREST_ROUTE_ENABLED = os.environ.get("ARREST_ROUTE_ENABLED", "0") != "0"
+ARREST_LOG_URL = os.environ.get(
+    "ARREST_LOG_URL", "https://www.burbankca.gov/web/police-department/daily-arrest-logs")
+ARREST_ANSWER = (
+    "The Police Department's daily arrest logs are updated every day and posted on the City's "
+    "official page:\n\n" + ARREST_LOG_URL + "\n\nOpen that page and select the date you want to "
+    "view or download its log (the page covers roughly the past 30 days). The logs are public "
+    "record."
+)
+
 bp = Blueprint("routes", __name__, static_folder="static", template_folder="static")
 
 cosmos_db_ready = asyncio.Event()
@@ -423,7 +437,12 @@ INDEX_ROUTING_ENABLED = bool(PERMITS_INDEX and CODES_INDEX)
 
 ROUTER_SYSTEM_MESSAGE = (
     "You route a resident's question for a city government assistant to ONE data source. "
-    "Reply with exactly one lowercase word: website, permit, events, or zoning.\n"
+    "Reply with exactly one lowercase word: website, permit, events, zoning, or arrest.\n"
+    "- arrest: a request to SEE, view, get, or list the arrest log, arrest logs, booking log, or "
+    "the police daily arrest log, including for a specific day, week, month, or date range (e.g. "
+    "'show me the arrest log for last week', 'yesterday's arrests', 'arrest log for 09-01'). This "
+    "is ONLY for the daily arrest/booking log itself. How to file a police report, crime stats, or "
+    "general police-department contact are NOT arrest -> route those to website.\n"
     "- website: people, officials, departments, contacts, phone/email, hours, addresses, "
     "city services, news, FAQs, general how-to questions, the municipal code / ordinances / "
     "zoning / regulations themselves (what the code or law says), AND how to apply for or "
@@ -488,6 +507,8 @@ async def classify_domain(user_query, client, history=None):
     except Exception:
         logging.exception("Domain classifier failed; defaulting to website")
         return "website"
+    if "arrest" in label:
+        return "arrest" if ARREST_ROUTE_ENABLED else "website"   # off -> code pipeline, as before
     if "zoning" in label:
         return "zoning" if ZONING_ROUTE_ENABLED else "website"   # off -> code pipeline, as before
     if "permit" in label:
@@ -516,7 +537,7 @@ async def classify_request(request_body, query=None):
     `query` is the reformulated standalone question (already history-resolved), so no history is
     passed to the classifier; falls back to the raw latest message if not provided."""
     if not (PERMIT_AGENT_ENABLED or EVENTS_ENABLED or CODE_PIPELINE_ENABLED
-            or INDEX_ROUTING_ENABLED or ZONING_ROUTE_ENABLED):
+            or INDEX_ROUTING_ENABLED or ZONING_ROUTE_ENABLED or ARREST_ROUTE_ENABLED):
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
     user_query = query or _latest_user_query(messages)
@@ -696,6 +717,16 @@ def website_stream_response(answer, context, history_metadata, answer_id=None):
     return generate()
 
 
+async def try_arrest_answer(request_body, domain):
+    """Arrest / daily-log requests -> a FIXED deflect to the live arrest log page. Deterministic
+    (no LLM, no retrieval) so it can't enumerate or invent daily-log dates or contents. Returns the
+    canned answer string, or None to fall through."""
+    if not ARREST_ROUTE_ENABLED or domain != "arrest":
+        return None
+    logging.info("[ARREST] deflect to %s", ARREST_LOG_URL)
+    return ARREST_ANSWER
+
+
 async def try_zoning_answer(request_body, domain, query=None):
     """Address-specific zoning / land-use questions -> answered from the code index with a zoning
     prompt (asks for the designation if absent, else answers from the code). Returns website_pipeline's
@@ -787,6 +818,9 @@ async def complete_chat_request(request_body, request_headers):
         events_answer = await try_events_answer(request_body, domain, q)
         if events_answer is not None:
             return permit_non_streaming_response(events_answer, history_metadata)
+        arrest_answer = await try_arrest_answer(request_body, domain)
+        if arrest_answer is not None:
+            return permit_non_streaming_response(arrest_answer, history_metadata)
         zoning_answer = await try_zoning_answer(request_body, domain, q)
         if zoning_answer is not None:
             return website_non_streaming_response(zoning_answer[0], zoning_answer[1], history_metadata, zoning_answer[2])
@@ -807,6 +841,9 @@ async def stream_chat_request(request_body, request_headers):
     events_answer = await try_events_answer(request_body, domain, q)
     if events_answer is not None:
         return permit_stream_response(events_answer, history_metadata)
+    arrest_answer = await try_arrest_answer(request_body, domain)
+    if arrest_answer is not None:
+        return permit_stream_response(arrest_answer, history_metadata)
     zoning_answer = await try_zoning_answer(request_body, domain, q)
     if zoning_answer is not None:
         return website_stream_response(zoning_answer[0], zoning_answer[1], history_metadata, zoning_answer[2])
