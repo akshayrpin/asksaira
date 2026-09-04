@@ -509,20 +509,22 @@ def route_index(domain):
     return None
 
 
-async def classify_request(request_body):
-    """Classify the latest question ONCE (website | permit | events) so the permit, events, website,
+async def classify_request(request_body, query=None):
+    """Classify the question ONCE (website | permit | events) so the permit, events, website,
     and index-routing paths share a single classifier call instead of each making their own. Returns
-    None (skip classifying) when no routable feature is enabled or there is no question."""
+    None (skip classifying) when no routable feature is enabled or there is no question.
+    `query` is the reformulated standalone question (already history-resolved), so no history is
+    passed to the classifier; falls back to the raw latest message if not provided."""
     if not (PERMIT_AGENT_ENABLED or EVENTS_ENABLED or CODE_PIPELINE_ENABLED
             or INDEX_ROUTING_ENABLED or ZONING_ROUTE_ENABLED):
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
-    user_query = _latest_user_query(messages)
+    user_query = query or _latest_user_query(messages)
     if not user_query:
         return None
     try:
         client = await init_openai_client()
-        return await classify_domain(user_query, client, history=_recent_history(messages))
+        return await classify_domain(user_query, client)
     except Exception:
         logging.exception("domain classification failed; defaulting to website")
         return "website"
@@ -551,13 +553,53 @@ def _recent_history(messages, turns=6, max_chars=700):
     return [{"role": m["role"], "content": m["content"][:max_chars]} for m in recent[-turns:]]
 
 
-async def try_permit_answer(request_body, domain):
-    """If the latest question is a permit-records question, answer it from the live
-    permits index and return the answer string. Otherwise return None (run normal RAG)."""
+_REFORMULATE_SYSTEM = (
+    "You rewrite the user's latest message into ONE standalone question for a city assistant, using "
+    "the earlier conversation ONLY to resolve references.\n"
+    "- If the latest message is a genuine follow-up that leans on an earlier turn (e.g. 'what about "
+    "in 2024?', 'and commercial ones?', or just a zoning designation like 'C-3'), rewrite it into a "
+    "full self-contained question by pulling in the needed context from that earlier turn.\n"
+    "- If the latest message is already self-contained, or is a NEW topic unrelated to the earlier "
+    "turns, output it unchanged and IGNORE the earlier turns entirely (do not carry over their "
+    "subject).\n"
+    "Output only the resulting question, nothing else."
+)
+
+
+async def reformulate_query(request_body):
+    """History-aware query rewrite, run ONCE upstream of the router. Resolves a genuine follow-up
+    from the recent turns, but keeps a new/unrelated question standalone so a prior topic can't bleed
+    into retrieval or routing. Returns the query string (the raw latest message on the first turn or
+    on any failure). Downstream classify/retrieval all run on this."""
+    messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
+    latest = _latest_user_query(messages)
+    hist = _recent_history(messages)
+    prior = hist[:-1] if hist else []
+    if not latest or not prior:   # nothing earlier to resolve against
+        return latest
+    try:
+        client = await init_openai_client()
+        resp = await client.chat.completions.create(
+            model=app_settings.azure_openai.model, temperature=0, max_tokens=120,
+            messages=[{"role": "system", "content": _REFORMULATE_SYSTEM}] + prior
+                     + [{"role": "user", "content": f"Latest message: {latest}\n\nStandalone question:"}])
+        rewritten = (resp.choices[0].message.content or "").strip()
+        if rewritten and rewritten != latest:
+            logging.info("[REFORMULATE] %r -> %r", latest, rewritten)
+        return rewritten or latest
+    except Exception:
+        logging.exception("query reformulation failed; using the raw latest message")
+        return latest
+
+
+async def try_permit_answer(request_body, domain, query=None):
+    """If the question is a permit-records question, answer it from the live permits index and return
+    the answer string. Otherwise return None (run normal RAG). `query` is the reformulated standalone
+    question; the raw recent history is still passed to the agent for its tool loop."""
     if not PERMIT_AGENT_ENABLED or domain != "permit":
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
-    user_query = _latest_user_query(messages)
+    user_query = query or _latest_user_query(messages)
     if not user_query:
         return None
     try:
@@ -576,14 +618,15 @@ async def try_permit_answer(request_body, domain):
 EVENTS_ENABLED = bool(events_feed) and events_feed.available()
 
 
-async def try_events_answer(request_body, domain):
+async def try_events_answer(request_body, domain, query=None):
     """If the classifier says EVENTS (upcoming events or a Council/board/commission meeting time),
-    answer from the current events.json. Returns the answer string, or None to fall through to RAG."""
+    answer from the current events.json. Returns the answer string, or None to fall through to RAG.
+    `query` is the reformulated standalone question."""
     if not EVENTS_ENABLED or domain != "events":
         return None
     try:
         client = await init_openai_client()
-        user_query = _latest_user_query(request_body.get("messages", []))
+        user_query = query or _latest_user_query(request_body.get("messages", []))
         if not user_query:
             return None
         logging.info("[EVENTS] handling: %s", user_query)
@@ -653,36 +696,36 @@ def website_stream_response(answer, context, history_metadata, answer_id=None):
     return generate()
 
 
-async def try_zoning_answer(request_body, domain):
+async def try_zoning_answer(request_body, domain, query=None):
     """Address-specific zoning / land-use questions -> answered from the code index with a zoning
     prompt (asks for the designation if absent, else answers from the code). Returns website_pipeline's
-    (answer, context, answer_id) or None to fall through."""
+    (answer, context, answer_id) or None to fall through. `query` is the reformulated standalone
+    question (a bare 'C-3' follow-up is already resolved upstream, so no concatenation here)."""
     if not ZONING_ROUTE_ENABLED or domain != "zoning":
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
-    q = _latest_user_query(messages)
+    q = query or _latest_user_query(messages)
     if not q:
         return None
     try:
         client = await init_openai_client()
         logging.info("[ZONING] %s", q)
-        return await zoning.answer_zoning_query(
-            q, client, app_settings.azure_openai.model, history=_recent_history(messages))
+        return await zoning.answer_zoning_query(q, client, app_settings.azure_openai.model)
     except Exception:
         logging.exception("zoning route failed; falling back")
         return None
 
 
-async def try_website_answer(request_body, domain):
+async def try_website_answer(request_body, domain, query=None):
     """If enabled and the classifier says WEBSITE, answer from burbank-code-v1 (hybrid + semantic
     rerank + in-depth prompt). Returns (answer, context) or None to fall through to on-your-data.
     Municipal-code questions now classify as WEBSITE and are answered here too; permit/meetings
-    never reach here."""
+    never reach here. `query` is the reformulated standalone question."""
     if not CODE_PIPELINE_ENABLED or domain != "website":
         return None
     try:
         client = await init_openai_client()
-        q = _latest_user_query(request_body.get("messages", []))
+        q = query or _latest_user_query(request_body.get("messages", []))
         if not q:
             return None
         logging.info("[CODE PIPELINE] website: %s", q)
@@ -736,17 +779,18 @@ async def complete_chat_request(request_body, request_headers):
         )
     else:
         history_metadata = request_body.get("history_metadata", {})
-        domain = await classify_request(request_body)      # classify ONCE; reused by every route
-        permit_answer = await try_permit_answer(request_body, domain)
+        q = await reformulate_query(request_body)          # history-resolved standalone query, ONCE
+        domain = await classify_request(request_body, q)   # classify ONCE; reused by every route
+        permit_answer = await try_permit_answer(request_body, domain, q)
         if permit_answer is not None:
             return permit_non_streaming_response(permit_answer, history_metadata)
-        events_answer = await try_events_answer(request_body, domain)
+        events_answer = await try_events_answer(request_body, domain, q)
         if events_answer is not None:
             return permit_non_streaming_response(events_answer, history_metadata)
-        zoning_answer = await try_zoning_answer(request_body, domain)
+        zoning_answer = await try_zoning_answer(request_body, domain, q)
         if zoning_answer is not None:
             return website_non_streaming_response(zoning_answer[0], zoning_answer[1], history_metadata, zoning_answer[2])
-        website = await try_website_answer(request_body, domain)   # website/codes -> code pipeline
+        website = await try_website_answer(request_body, domain, q)   # website/codes -> code pipeline
         if website is not None:
             return website_non_streaming_response(website[0], website[1], history_metadata, website[2])
         response, apim_request_id = await send_chat_request(request_body, request_headers, domain)
@@ -755,17 +799,18 @@ async def complete_chat_request(request_body, request_headers):
 
 async def stream_chat_request(request_body, request_headers):
     history_metadata = request_body.get("history_metadata", {})
-    domain = await classify_request(request_body)      # classify ONCE; reused by every route
-    permit_answer = await try_permit_answer(request_body, domain)
+    q = await reformulate_query(request_body)          # history-resolved standalone query, ONCE
+    domain = await classify_request(request_body, q)   # classify ONCE; reused by every route
+    permit_answer = await try_permit_answer(request_body, domain, q)
     if permit_answer is not None:
         return permit_stream_response(permit_answer, history_metadata)
-    events_answer = await try_events_answer(request_body, domain)
+    events_answer = await try_events_answer(request_body, domain, q)
     if events_answer is not None:
         return permit_stream_response(events_answer, history_metadata)
-    zoning_answer = await try_zoning_answer(request_body, domain)
+    zoning_answer = await try_zoning_answer(request_body, domain, q)
     if zoning_answer is not None:
         return website_stream_response(zoning_answer[0], zoning_answer[1], history_metadata, zoning_answer[2])
-    website = await try_website_answer(request_body, domain)   # website/codes -> code pipeline
+    website = await try_website_answer(request_body, domain, q)   # website/codes -> code pipeline
     if website is not None:
         return website_stream_response(website[0], website[1], history_metadata, website[2])
     response, apim_request_id = await send_chat_request(request_body, request_headers, domain)

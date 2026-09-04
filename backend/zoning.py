@@ -39,11 +39,11 @@ ZONING_SYSTEM = (
 )
 
 
-async def answer_zoning_query(question, client, model, history=None):
-    """Answer via the code index with the zoning prompt. Retrieval query = the recent conversation,
-    so turn-2 ('zoning is C-3') still pulls the right sections using the use named in turn 1.
+async def answer_zoning_query(question, client, model):
+    """Answer via the code index with the zoning prompt. `question` is the reformulated standalone
+    query: a follow-up like 'the zoning is C-3' has already been resolved upstream into a full
+    question (use + designation), so we retrieve and answer on it directly, with no conversation
+    concatenation (that used to drag unrelated earlier turns into retrieval).
     Returns website_pipeline's (answer, context, answer_id)."""
-    turns = [m.get("content", "") for m in (history or []) if m.get("role") == "user"]
-    convo = "\n".join(turns) if turns else question
     return await website_pipeline.answer_website_query(
-        convo, client, model, system=ZONING_SYSTEM, retrieval_query=convo)
+        question, client, model, system=ZONING_SYSTEM, retrieval_query=question)
