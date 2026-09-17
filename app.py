@@ -44,6 +44,10 @@ try:
 except Exception:  # missing aiohttp etc. -> feature simply stays off
     permit_agent = None
     logging.exception("permit agent unavailable; permit questions fall back to RAG")
+try:  # Accela permit core client (e.g. Whittier sairaaccela); selected via PERMIT_BACKEND=accela
+    from backend.permit_agent import accela_client
+except Exception:
+    accela_client = None
 try:  # City calendar (events + meetings) from events.json; replaces the Granicus meetings feed
     from backend import events as events_feed
 except Exception:
@@ -423,7 +427,12 @@ INDEX_ROUTING_ENABLED = bool(PERMITS_INDEX and CODES_INDEX)
 
 ROUTER_SYSTEM_MESSAGE = (
     "You route a resident's question for a city government assistant to ONE data source. "
-    "Reply with exactly one lowercase word: website, permit, events, or zoning.\n"
+    "Reply with exactly one lowercase word: website, permit, business_license, events, or zoning.\n"
+    "- business_license: looking up EXISTING business license records, whether a business is "
+    "licensed, a license's status, or counts/lists of business licenses. Examples: 'is Joe''s "
+    "Coffee licensed', 'business license status for account 58023', 'how many active business "
+    "licenses', 'list contractor licenses'. Use this for business LICENSE records specifically, "
+    "not general permits and not how-to-get-a-license (that is website).\n"
     "- website: people, officials, departments, contacts, phone/email, hours, addresses, "
     "city services, news, FAQs, general how-to questions, the municipal code / ordinances / "
     "zoning / regulations themselves (what the code or law says), AND how to apply for or "
@@ -491,6 +500,8 @@ async def classify_domain(user_query, client, history=None):
     # code pipeline, never the native on-your-data path (which may point at a different-dim index).
     if "zoning" in label:
         return "zoning" if ZONING_ROUTE_ENABLED else "website"
+    if "business" in label:                                  # business_license (only label with it)
+        return "business_license" if BUSINESS_LICENSE_ENABLED else "website"
     if "permit" in label:
         return "permit" if PERMIT_AGENT_ENABLED else "website"
     if "event" in label:
@@ -515,7 +526,7 @@ async def classify_request(request_body):
     and index-routing paths share a single classifier call instead of each making their own. Returns
     None (skip classifying) when no routable feature is enabled or there is no question."""
     if not (PERMIT_AGENT_ENABLED or EVENTS_ENABLED or CODE_PIPELINE_ENABLED
-            or INDEX_ROUTING_ENABLED or ZONING_ROUTE_ENABLED):
+            or INDEX_ROUTING_ENABLED or ZONING_ROUTE_ENABLED or BUSINESS_LICENSE_ENABLED):
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
     user_query = _latest_user_query(messages)
@@ -534,6 +545,20 @@ async def classify_request(request_body):
 # 'permit' is answered by the read-permits agent (counts/lists/lookups over the permits
 # index) instead of RAG. Everything else (website, codes) is unchanged.
 PERMIT_AGENT_ENABLED = bool(permit_agent) and os.environ.get("PERMIT_AGENT_ENABLED", "0") != "0"
+
+# Which records backend the PERMIT route uses: 'epals' (permit_client, default) or 'accela'
+# (accela_client, e.g. Whittier's sairaaccela core). Business licenses are a SEPARATE route/core.
+PERMIT_BACKEND = os.environ.get("PERMIT_BACKEND", "epals").lower()
+# Business-license route: own classifier category + own core (ePALS permit_client pointed at the BL
+# core via PERMITS_API_BASE). Opt-in per city.
+BUSINESS_LICENSE_ENABLED = bool(permit_agent) and os.environ.get("BUSINESS_LICENSE_ENABLED", "0") != "0"
+
+
+def _permit_cfg():
+    """(client_module, system_prompt, trailing_note) for the permit route, per PERMIT_BACKEND."""
+    if PERMIT_BACKEND == "accela" and accela_client:
+        return accela_client, permit_agent.ACCELA_SYSTEM, ""      # Accela: no older-permits portal note
+    return permit_agent.pc, permit_agent.SYSTEM, permit_agent.OLDER_PERMITS_NOTE
 
 
 def _latest_user_query(messages):
@@ -564,11 +589,35 @@ async def try_permit_answer(request_body, domain):
     try:
         client = await init_openai_client()
         history = _recent_history(messages)
-        logging.info("[PERMIT AGENT] handling: %s", user_query)
+        cl, system, note = _permit_cfg()
+        logging.info("[PERMIT AGENT] (%s) handling: %s", PERMIT_BACKEND, user_query)
         return await permit_agent.answer_permit_query(
-            user_query, client, app_settings.azure_openai.model, history=history)
+            user_query, client, app_settings.azure_openai.model, history=history,
+            cl=cl, system=system, note=note)
     except Exception:
         logging.exception("permit agent failed; falling back to RAG")
+        return None
+
+
+async def try_business_license_answer(request_body, domain):
+    """Business-license records question -> answer from the BL core (ePALS permit_client pointed at
+    it via PERMITS_API_BASE) with the business-license prompt. Returns the answer string, or None."""
+    if not BUSINESS_LICENSE_ENABLED or domain != "business_license":
+        return None
+    messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
+    user_query = _latest_user_query(messages)
+    if not user_query:
+        return None
+    try:
+        client = await init_openai_client()
+        history = _recent_history(messages)
+        logging.info("[BUSINESS LICENSE] handling: %s", user_query)
+        return await permit_agent.answer_permit_query(
+            user_query, client, app_settings.azure_openai.model, history=history,
+            cl=permit_agent.pc, system=permit_agent.BL_SYSTEM, note="",
+            drop_fields=("module", "renewal", "business_active"))  # BL core has no such fields
+    except Exception:
+        logging.exception("business license agent failed; falling back to RAG")
         return None
 
 
@@ -743,6 +792,9 @@ async def complete_chat_request(request_body, request_headers):
         permit_answer = await try_permit_answer(request_body, domain)
         if permit_answer is not None:
             return permit_non_streaming_response(permit_answer, history_metadata)
+        bl_answer = await try_business_license_answer(request_body, domain)
+        if bl_answer is not None:
+            return permit_non_streaming_response(bl_answer, history_metadata)
         events_answer = await try_events_answer(request_body, domain)
         if events_answer is not None:
             return permit_non_streaming_response(events_answer, history_metadata)
@@ -762,6 +814,9 @@ async def stream_chat_request(request_body, request_headers):
     permit_answer = await try_permit_answer(request_body, domain)
     if permit_answer is not None:
         return permit_stream_response(permit_answer, history_metadata)
+    bl_answer = await try_business_license_answer(request_body, domain)
+    if bl_answer is not None:
+        return permit_stream_response(bl_answer, history_metadata)
     events_answer = await try_events_answer(request_body, domain)
     if events_answer is not None:
         return permit_stream_response(events_answer, history_metadata)

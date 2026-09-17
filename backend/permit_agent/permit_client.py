@@ -63,7 +63,10 @@ ACTIVE_BUSINESS_STATUSES = ["Paid / Current", "Pending Renewal"]
 
 # Fields a user actually cares about, kept small so tool results stay cheap.
 _SUMMARY = ["act_nbr", "type", "status", "department", "address",
-            "applied_date", "valuation_calculated", "description"]
+            "applied_date", "valuation_calculated", "description",
+            # business-license fields (present on a BL core; _pick omits them when absent, so this
+            # is harmless for permit cores that don't have them)
+            "BUSINESS_NAME", "BUSINESS_ACC_NO", "business_phone"]
 
 # For a single lookup
 _DETAIL = _SUMMARY + ["issued_date", "final_date", "exp_date", "zone",

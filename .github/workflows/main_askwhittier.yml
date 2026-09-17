@@ -7,7 +7,7 @@ name: Build and deploy Python app to Azure Web App - askwhittier
 on:
   push:
     branches:
-      - main
+      - whittier
   workflow_dispatch:
 
 jobs:
