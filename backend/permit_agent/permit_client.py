@@ -413,13 +413,17 @@ async def search(query=None, **filters):
 
 
 async def get_permit(act_nbr):
-    """Look up one permit by its number (e.g. BS2504744)."""
+    """Look up one record by its number. A 'BL...' value is a license number -> match act_nbr;
+    anything else is treated as a business ACCOUNT number -> match BUSINESS_ACC_NO. We require an
+    EXACT match on that field (no fallback to a loose _text_ hit) so a number that merely appears in
+    some other field, e.g. the internal document id, is never returned by mistake."""
     nbr = str(act_nbr).strip()
     data = await _query([("q", f"_text_:{_esc(nbr)}"), ("rows", "25")])
     docs = data["response"]["docs"]
     up = nbr.upper()
-    exact = [d for d in docs if str(d.get("act_nbr", "")).strip().upper() == up]
-    chosen = exact or docs
+    field = "act_nbr" if up.startswith("BL") else "BUSINESS_ACC_NO"
+    exact = [d for d in docs if str(d.get(field, "")).strip().upper() == up]
+    chosen = exact                    # exact-only: don't return an unrelated _text_ match
     if not chosen:
         return {"found": False}
     doc = chosen[0]

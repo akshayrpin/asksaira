@@ -196,13 +196,22 @@ async def search(query=None, **filters):
     return out
 
 
+def _vals(doc, field):
+    """A field's value(s) as a list of strings (Accela custom_id/id can be multivalued)."""
+    v = doc.get(field)
+    return [str(v)] if isinstance(v, str) else [str(x) for x in (v or [])]
+
+
 async def get_permit(act_nbr):
     nbr = str(act_nbr).strip()
-    data = await _query([("q", f"_text_:{_esc(nbr)}"), ("rows", "25")])
-    docs = data["response"]["docs"]
     up = nbr.upper()
+    # Phrase-search so the hyphen is literal (an unquoted '-' is Solr's NOT operator, and _esc would
+    # drop it entirely, so 'SO26-2374' never matched the stored value).
+    q = '_text_:"{}"'.format(nbr.replace('"', ''))
+    data = await _query([("q", q), ("rows", "25")])
+    docs = data["response"]["docs"]
     exact = [d for d in docs
-             if up in (str(d.get(F_NUM, "")).upper(), str(d.get("id", "")).upper())]
+             if any(x.strip().upper() == up for x in _vals(d, F_NUM) + _vals(d, "id"))]
     chosen = exact or docs
     if not chosen:
         return {"found": False}

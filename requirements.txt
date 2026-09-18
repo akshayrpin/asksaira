@@ -9,6 +9,9 @@ quart==0.19.9
 uvicorn==0.24.0
 aiohttp==3.9.2
 gunicorn==20.1.0
+# gunicorn 20.1.0 imports pkg_resources, which Python 3.12 no longer bundles; setuptools provides it.
+# Pinned <81 because setuptools 81+ removes pkg_resources. (We're on 3.12 to dodge the 3.11.15 build bug.)
+setuptools<81
 pydantic-settings==2.2.1
 tzdata
 # Application Insights request/dependency telemetry. The asgi instrumentation must stay
