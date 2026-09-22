@@ -72,6 +72,39 @@ SEM_CONFIG = os.environ.get("CODE_SEMANTIC_CONFIG", "sem")
 EMBED_MODEL = os.environ.get("AZURE_OPENAI_EMBEDDING_NAME") or "text-embedding-3-large"
 API = "2024-07-01"
 
+# Query expansion (website route only). The user's phrasing sometimes misses the corpus's
+# vocabulary -- "who is running for city council" never surfaces the candidates page, which is a
+# list of names, because "running for" doesn't match "candidates/election". This appends a few
+# intent/synonym terms to the RETRIEVAL query only (never the generation question), strengthening
+# the keyword side without drifting meaning. Gated + reversible per city.
+QUERY_EXPANSION_ENABLED = os.environ.get("QUERY_EXPANSION_ENABLED", "0") != "0"
+_EXPAND_SYSTEM = (
+    "You add a few search keywords to a resident's question so a city-website search finds the "
+    "right page. Output ONLY 3-8 extra terms (space-separated, no punctuation, no explanation) that "
+    "name the same intent in the vocabulary a government website would use -- synonyms and the "
+    "concrete nouns the answer page would carry. Do NOT restate the question; give only the ADDED "
+    "terms. Examples: 'who is running for city council' -> 'candidates election ballot nominees'. "
+    "'how do I get rid of a couch' -> 'bulky item pickup disposal sanitation'. If nothing useful to "
+    "add, output nothing."
+)
+
+
+async def _expand_query(question, client, model):
+    """Return `question` plus a few retrieval-only keyword terms, or the bare question on any error.
+    Keeps the user's words (they drive the vector side) and adds vocabulary for the keyword side."""
+    try:
+        resp = await client.chat.completions.create(
+            model=model, temperature=0, max_tokens=40,
+            messages=[{"role": "system", "content": _EXPAND_SYSTEM},
+                      {"role": "user", "content": question}])
+        terms = (resp.choices[0].message.content or "").strip()
+        if terms:
+            logging.info("[EXPAND] %r + %r", question, terms)
+            return f"{question} {terms}"
+    except Exception:
+        logging.exception("query expansion failed; using the raw question")
+    return question
+
 SYSTEM = (
     "You are the City of Burbank's assistant. Give the resident a thorough, genuinely helpful "
     "answer using ONLY the numbered sources provided. Rules:\n"
@@ -236,6 +269,10 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
     t0 = time.monotonic()
     _rspan = _tracer.start_span("website.retrieve") if _tracer else None
     rq = retrieval_query or question          # zoning passes a conversation-derived retrieval query
+    # Expand ONLY for the website route: retrieval_query is None means a plain website question
+    # (zoning/others supply their own retrieval query and are left untouched).
+    if retrieval_query is None and QUERY_EXPANSION_ENABLED:
+        rq = await _expand_query(question, client, model)
     emb = await client.embeddings.create(model=EMBED_MODEL, input=[rq])
     chunks = await _retrieve(emb.data[0].embedding, rq, pool, candidates)
     hits = chunks[:k] if _is_code_query(rq) else _demote_code(chunks, k)
