@@ -55,9 +55,19 @@ CODE_ENFORCEMENT_CONTACT = "For more information on the code enforcement permits
 # Permit" catalog). Used as the deterministic default scope for general permit questions.
 NON_BUILDING_TYPES = ["Building Administration", "Code Enforcement", "Zoning Verification"]
 
+# Planning (PL) permits: never surface the internal "Project Administration" type in results, and
+# never show a valuation for any Planning permit (valuation isn't meaningful for planning cases).
+PLANNING_MODULE = "PLANNING"
+PLANNING_EXCLUDE_TYPES = ["Project Administration"]
+
 
 def _is_code_enforcement(doc):
     return str(doc.get("type", "")).strip().lower() == CODE_ENFORCEMENT_TYPE
+
+
+def _is_planning(doc):
+    return (str(doc.get("module", "")).strip().upper() == PLANNING_MODULE
+            or str(doc.get("act_nbr", "")).strip().upper().startswith("PL"))
 
 # BUSINESS TAX: an account renews yearly, so ONE business has many records over time. Counting
 # every record over-counts massively. "How many businesses are in the city"
@@ -165,8 +175,11 @@ def _fqs(type=None, status=None, department=None, module=None, address=None,
     out = []
     if type:
         out.append(("fq", f'type:"{type}"'))
-    if exclude_types:                # drop these type values (used by the building-permit default)
-        out.append(("fq", "-type:(" + " OR ".join(f'"{t}"' for t in exclude_types) + ")"))
+    ex = list(exclude_types or [])   # drop these type values (building-permit default, planning admin)
+    if module and module.strip().upper() == PLANNING_MODULE:
+        ex += [t for t in PLANNING_EXCLUDE_TYPES if t not in ex]   # never show Project Administration
+    if ex:
+        out.append(("fq", "-type:(" + " OR ".join(f'"{t}"' for t in ex) + ")"))
     if status:                       # str -> one status; list/tuple -> OR-match several
         if isinstance(status, (list, tuple)):
             out.append(("fq", "status:(" + " OR ".join(f'"{s}"' for s in status) + ")"))
@@ -232,10 +245,12 @@ def _pick(doc, fields):
 
 def _summary_for(doc):
     """Per-record summary. Code Enforcement records are restricted to the city-approved fields
-    (Permit Number, Status, Type, Address, Started); every other module uses the full summary."""
+    (Permit Number, Status, Type, Address, Started); every other module uses the full summary.
+    Planning (PL) permits never surface a valuation."""
     if _is_code_enforcement(doc):
         return _pick(doc, CODE_ENFORCEMENT_FIELDS)
-    return _pick(doc, _SUMMARY)
+    fields = [f for f in _SUMMARY if f != "valuation_calculated"] if _is_planning(doc) else _SUMMARY
+    return _pick(doc, fields)
 
 
 def _has_code_enforcement(docs):
@@ -430,7 +445,8 @@ async def get_permit(act_nbr):
     if _is_code_enforcement(doc):
         return {"found": True, "exact": bool(exact),
                 "permit": _pick(doc, CODE_ENFORCEMENT_FIELDS), "note": CODE_ENFORCEMENT_CONTACT}
-    return {"found": True, "exact": bool(exact), "permit": _pick(doc, _DETAIL)}
+    fields = [f for f in _DETAIL if f != "valuation_calculated"] if _is_planning(doc) else _DETAIL
+    return {"found": True, "exact": bool(exact), "permit": _pick(doc, fields)}
 
 
 async def distinct_values(field, limit=50):
