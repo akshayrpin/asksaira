@@ -55,9 +55,12 @@ CODE_ENFORCEMENT_CONTACT = "For more information on the code enforcement permits
 # Permit" catalog). Used as the deterministic default scope for general permit questions.
 NON_BUILDING_TYPES = ["Building Administration", "Code Enforcement", "Zoning Verification"]
 
-# Planning (PL) permits: never surface the internal "Project Administration" type in results, and
-# never show a valuation for any Planning permit (valuation isn't meaningful for planning cases).
+# Planning (PL) permits never show a valuation (not meaningful for planning cases).
 PLANNING_MODULE = "PLANNING"
+
+# Types never surfaced UNDER PLANNING -- excluded from Planning lists/counts/breakdowns and from a
+# direct lookup of a Planning permit of this type (it returns not-found). ONLY scoped to Planning;
+# the same type elsewhere, and every other Planning permit, shows normally.
 PLANNING_EXCLUDE_TYPES = ["Project Administration"]
 
 
@@ -68,6 +71,12 @@ def _is_code_enforcement(doc):
 def _is_planning(doc):
     return (str(doc.get("module", "")).strip().upper() == PLANNING_MODULE
             or str(doc.get("act_nbr", "")).strip().upper().startswith("PL"))
+
+
+def _is_planning_excluded(doc):
+    """A Planning permit of an excluded type (Project Administration) -- never surfaced under
+    Planning, including a direct number lookup. Non-Planning permits of the same type are fine."""
+    return _is_planning(doc) and str(doc.get("type", "")).strip() in PLANNING_EXCLUDE_TYPES
 
 # BUSINESS TAX: an account renews yearly, so ONE business has many records over time. Counting
 # every record over-counts massively. "How many businesses are in the city"
@@ -177,7 +186,7 @@ def _fqs(type=None, status=None, department=None, module=None, address=None,
         out.append(("fq", f'type:"{type}"'))
     ex = list(exclude_types or [])   # drop these type values (building-permit default, planning admin)
     if module and module.strip().upper() == PLANNING_MODULE:
-        ex += [t for t in PLANNING_EXCLUDE_TYPES if t not in ex]   # never show Project Administration
+        ex += [t for t in PLANNING_EXCLUDE_TYPES if t not in ex]   # Project Administration: Planning only
     if ex:
         out.append(("fq", "-type:(" + " OR ".join(f'"{t}"' for t in ex) + ")"))
     if status:                       # str -> one status; list/tuple -> OR-match several
@@ -442,6 +451,8 @@ async def get_permit(act_nbr):
     if not chosen:
         return {"found": False}
     doc = chosen[0]
+    if _is_planning_excluded(doc):       # Project Administration under Planning is never surfaced
+        return {"found": False}
     if _is_code_enforcement(doc):
         return {"found": True, "exact": bool(exact),
                 "permit": _pick(doc, CODE_ENFORCEMENT_FIELDS), "note": CODE_ENFORCEMENT_CONTACT}
