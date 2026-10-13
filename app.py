@@ -954,9 +954,20 @@ async def add_conversation():
         if not current_app.cosmos_conversation_client:
             raise Exception("CosmosDB is not configured or not working")
 
-        # check for the conversation_id, if the conversation is not set, we will create a new one
+        # Ensure the conversation exists before writing a message to it. We create a new one when no
+        # conversation_id is given OR when the given one is not in the DB (stale/deleted/cleared id
+        # the frontend is still sending). Previously a missing id raised "Conversation not found",
+        # which broke every message in that chat; now we self-heal by starting a fresh conversation.
         history_metadata = {}
-        if not conversation_id:
+        conversation = None
+        if conversation_id:
+            conversation = await current_app.cosmos_conversation_client.get_conversation(
+                user_id, conversation_id
+            )
+        if not conversation:
+            if conversation_id:
+                logging.info("Conversation %s not found; starting a fresh one (self-heal).",
+                             conversation_id)
             title = await generate_title(request_json["messages"])
             conversation_dict = await current_app.cosmos_conversation_client.create_conversation(
                 user_id=user_id, title=title
@@ -976,6 +987,7 @@ async def add_conversation():
                 input_message=messages[-1],
             )
             if createdMessageValue == "Conversation not found":
+                # We just ensured it exists, so this should not happen; fail loudly if it does.
                 raise Exception(
                     "Conversation not found for the given conversation ID: "
                     + conversation_id
