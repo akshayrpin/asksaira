@@ -20,6 +20,16 @@ ZONING_MAP_URL = os.environ.get(
     "ZONING_MAP_URL",
     "https://experience.arcgis.com/experience/00653afd849744eab0ca3547d66db78a/page/PIM")
 
+
+def _ask_for_zone():
+    """Deterministic 'I need the zone' reply, shaped like website_pipeline's (answer, context, id)."""
+    msg = (
+        f"To tell you what's allowed at a specific property, I need its zoning designation (like C-3 "
+        f"or R-1). I can't determine that from the address alone. Please look the property up on the "
+        f"City's zoning map at {ZONING_MAP_URL}, then reply with its zone and I'll check the rules "
+        f"against the municipal code. For help, contact {PLANNING_CONTACT}.")
+    return msg, {"citations": []}, None
+
 ZONING_SYSTEM = (
     f"You are the City of {CITY_NAME}'s Planning assistant answering a question about what may be "
     "done at a specific property (a land-use / zoning question). The answer depends on the "
@@ -39,11 +49,15 @@ ZONING_SYSTEM = (
 )
 
 
-async def answer_zoning_query(question, client, model):
-    """Answer via the code index with the zoning prompt. `question` is the reformulated standalone
-    query: a follow-up like 'the zoning is C-3' has already been resolved upstream into a full
-    question (use + designation), so we retrieve and answer on it directly, with no conversation
-    concatenation (that used to drag unrelated earlier turns into retrieval).
+async def answer_zoning_query(question, client, model, has_designation=False):
+    """Answer a specific-property land-use question. `has_designation` is decided by the LLM router
+    (domain 'zoning-answer' vs 'zoning'), not by pattern-matching here.
+
+    GATE: with NO designation we don't retrieve at all -- we return a fixed GIS deflect. This stops
+    the route from pulling an address-matching decision letter or Economic Development page and
+    answering from it. Only once a designation is present do we retrieve and answer from the code.
     Returns website_pipeline's (answer, context, answer_id)."""
+    if not has_designation:
+        return _ask_for_zone()
     return await website_pipeline.answer_website_query(
         question, client, model, system=ZONING_SYSTEM, retrieval_query=question)

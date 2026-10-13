@@ -437,7 +437,8 @@ INDEX_ROUTING_ENABLED = bool(PERMITS_INDEX and CODES_INDEX)
 
 ROUTER_SYSTEM_MESSAGE = (
     "You route a resident's question for a city government assistant to ONE data source. "
-    "Reply with exactly one lowercase word: website, permit, events, zoning, or arrest.\n"
+    "Reply with exactly one lowercase word: website, permit, events, zoning, zoning-answer, or "
+    "arrest.\n"
     "- arrest: a request to SEE, view, get, or list the arrest log, arrest logs, booking log, or "
     "the police daily arrest log, including for a specific day, week, month, or date range (e.g. "
     "'show me the arrest log for last week', 'yesterday's arrests', 'arrest log for 09-01'). This "
@@ -467,14 +468,18 @@ ROUTER_SYSTEM_MESSAGE = (
     "calendar. This covers only WHAT is scheduled and WHEN. A question about the DETAILS or "
     "LOGISTICS of an event (street or road closures, parking, traffic, routes, rules, how to take "
     "part) is NOT a calendar lookup, route those to website. NOT permit or code lookups.\n"
-    "- zoning: use ONLY when the resident names a SPECIFIC PROPERTY or STREET ADDRESS, or supplies a "
-    "zoning designation. Examples: 'can I open a medical office at 2019 W Magnolia', 'what can I "
-    "build at 123 N Main St', 'is a duplex allowed at [address]', and short follow-ups giving a "
-    "designation ('zoning is C-3', 'it's C-3', or just 'C-3', 'R-1', 'MDC-3') answering an earlier "
-    "property question. A GENERAL rules question with NO specific property or address is NOT zoning "
-    "-> route it to website: e.g. 'can a dumpster be put in an alley', 'how tall can a fence be', "
-    "'what are the setback requirements', 'do I need a permit for a shed'. The trigger is a named "
-    "property/address or a zoning designation; without one, it is website.\n"
+    "- zoning: a land-use / what-may-be-done-here question about a SPECIFIC PROPERTY or STREET "
+    "ADDRESS where NO zoning designation is present in the conversation yet. The property's zone is "
+    "needed to answer and has not been given. Examples: 'can I open a medical office at 2019 W "
+    "Magnolia', 'what can I build at 123 N Main St', 'is a duplex allowed at [address]'.\n"
+    "- zoning-answer: the SAME kind of specific-property land-use question, but a zoning DESIGNATION "
+    "is present in the conversation (for example C-3, R-1, MDC-3, BCC-1), stated now or supplied as a "
+    "short follow-up to an earlier property question ('zoning is C-3', 'it's C-3', or just 'C-3', "
+    "'R-1'). Choose this ONLY when both a property/use question and a designation are available, so "
+    "the rules can actually be answered.\n"
+    "A GENERAL rules question with NO specific property/address is NOT zoning or zoning-answer -> "
+    "route it to website: e.g. 'how tall can a fence be', 'what are the setback requirements', 'what "
+    "is the lot coverage in the R-1 zone', 'do I need a permit for a shed'.\n"
     "If you are unsure, answer website."
 )
 
@@ -510,7 +515,9 @@ async def classify_domain(user_query, client, history=None):
     if "arrest" in label:
         return "arrest" if ARREST_ROUTE_ENABLED else "website"   # off -> code pipeline, as before
     if "zoning" in label:
-        return "zoning" if ZONING_ROUTE_ENABLED else "website"   # off -> code pipeline, as before
+        if not ZONING_ROUTE_ENABLED:
+            return "website"                 # off -> code pipeline, as before
+        return "zoning-answer" if "answer" in label else "zoning"   # LLM picks the mode
     if "permit" in label:
         return "permit"
     if "event" in label:
@@ -732,7 +739,7 @@ async def try_zoning_answer(request_body, domain, query=None):
     prompt (asks for the designation if absent, else answers from the code). Returns website_pipeline's
     (answer, context, answer_id) or None to fall through. `query` is the reformulated standalone
     question (a bare 'C-3' follow-up is already resolved upstream, so no concatenation here)."""
-    if not ZONING_ROUTE_ENABLED or domain != "zoning":
+    if not ZONING_ROUTE_ENABLED or domain not in ("zoning", "zoning-answer"):
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
     q = query or _latest_user_query(messages)
@@ -740,8 +747,12 @@ async def try_zoning_answer(request_body, domain, query=None):
         return None
     try:
         client = await init_openai_client()
-        logging.info("[ZONING] %s", q)
-        return await zoning.answer_zoning_query(q, client, app_settings.azure_openai.model)
+        # The router decides the mode: 'zoning-answer' = a designation is present (retrieve + answer
+        # from the code); 'zoning' = no designation yet (ask for the zone via GIS, no retrieval).
+        has_designation = domain == "zoning-answer"
+        logging.info("[ZONING] has_designation=%s %s", has_designation, q)
+        return await zoning.answer_zoning_query(
+            q, client, app_settings.azure_openai.model, has_designation=has_designation)
     except Exception:
         logging.exception("zoning route failed; falling back")
         return None
