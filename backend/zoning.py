@@ -11,7 +11,7 @@ answer is grounded in the actual indexed code. Gated by ZONING_ROUTE_ENABLED in 
 """
 import os
 
-from backend import website_pipeline
+from backend import planning, website_pipeline
 
 CITY_NAME = os.environ.get("CITY_NAME", "Burbank")
 PLANNING_CONTACT = os.environ.get(
@@ -59,5 +59,6 @@ async def answer_zoning_query(question, client, model, has_designation=False):
     Returns website_pipeline's (answer, context, answer_id)."""
     if not has_designation:
         return _ask_for_zone()
-    return await website_pipeline.answer_website_query(
-        question, client, model, system=ZONING_SYSTEM, retrieval_query=question)
+    # A zoning answer is a planning answer: ground it in the SAME restricted source set (municipal
+    # code + Planning document library) via the planning route, but keep the zoning prompt.
+    return await planning.answer_planning_query(question, client, model, system=ZONING_SYSTEM)

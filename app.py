@@ -63,6 +63,13 @@ except Exception:
     logging.exception("zoning route unavailable")
 ZONING_ROUTE_ENABLED = bool(zoning) and os.environ.get("ZONING_ROUTE_ENABLED", "0") != "0"
 
+try:  # Planning-dept questions answered ONLY from the municipal code + the Planning document library
+    from backend import planning
+except Exception:
+    planning = None
+    logging.exception("planning route unavailable")
+PLANNING_ROUTE_ENABLED = bool(planning) and os.environ.get("PLANNING_ROUTE_ENABLED", "0") != "0"
+
 # Arrest / police daily-log deflect. The logs update daily and can't be re-pushed that often, and
 # the model won't reliably stop enumerating/inventing per-day dates from a prompt rule, so answer
 # DETERMINISTICALLY: the classifier only routes here, the reply is fixed text (no LLM generation,
@@ -437,18 +444,18 @@ INDEX_ROUTING_ENABLED = bool(PERMITS_INDEX and CODES_INDEX)
 
 ROUTER_SYSTEM_MESSAGE = (
     "You route a resident's question for a city government assistant to ONE data source. "
-    "Reply with exactly one lowercase word: website, permit, events, zoning, zoning-answer, or "
-    "arrest.\n"
+    "Reply with exactly one lowercase word: website, planning, permit, events, zoning, "
+    "zoning-answer, or arrest.\n"
     "- arrest: a request to SEE, view, get, or list the arrest log, arrest logs, booking log, or "
     "the police daily arrest log, including for a specific day, week, month, or date range (e.g. "
     "'show me the arrest log for last week', 'yesterday's arrests', 'arrest log for 09-01'). This "
     "is ONLY for the daily arrest/booking log itself. How to file a police report, crime stats, or "
     "general police-department contact are NOT arrest -> route those to website.\n"
     "- website: people, officials, departments, contacts, phone/email, hours, addresses, "
-    "city services, news, FAQs, general how-to questions, the municipal code / ordinances / "
-    "zoning / regulations themselves (what the code or law says), AND how to apply for or "
-    "pay for a permit, permit fees, what documents are needed, which permit you need for a "
-    "project, what permit types the city offers in general, and Building & Safety info. "
+    "city services, news, FAQs, general how-to questions, AND how to apply for or "
+    "pay for a permit, permit FEES and fee schedules, what documents are needed, which permit you "
+    "need for a project, what permit types the city offers in general, and Building & Safety info. "
+    "Fee / 'how much' questions are website, NOT planning. "
     'Examples: "how do I apply for a building permit", "how to apply for a permit online", '
     '"what permit do I need for a fence", "what are the permit fees", "what documents do I '
     'need for a permit".\n'
@@ -468,6 +475,16 @@ ROUTER_SYSTEM_MESSAGE = (
     "calendar. This covers only WHAT is scheduled and WHEN. A question about the DETAILS or "
     "LOGISTICS of an event (street or road closures, parking, traffic, routes, rules, how to take "
     "part) is NOT a calendar lookup, route those to website. NOT permit or code lookups.\n"
+    "- planning: a GENERAL land-use, zoning-code, or development-STANDARDS question (not tied to one "
+    "named property address), or a question about a City planning document. Use for: development "
+    "standards (setbacks, lot coverage, height, floor-area ratio, landscaping, sign rules), what the "
+    "zoning/municipal code or a specific plan requires, the General Plan, the Housing Element and its "
+    "opportunity sites, specific & master plans (Center Plan, Media District, etc.), density bonus, "
+    "inclusionary housing, historic preservation, ADU standards, and what a Conditional Use Permit or "
+    "entitlement is or when one is needed. Examples: 'what is the front setback in the C-3 zone', "
+    "'lot coverage in R-1', 'sign requirements', 'what are the housing element opportunity sites', "
+    "'do I need a hillside development permit'. NOT for FEES or 'how much' (website), and NOT when a "
+    "specific property address is named without a designation (that is zoning).\n"
     "- zoning: a land-use / what-may-be-done-here question about a SPECIFIC PROPERTY or STREET "
     "ADDRESS where NO zoning designation is present in the conversation yet. The property's zone is "
     "needed to answer and has not been given. Examples: 'can I open a medical office at 2019 W "
@@ -477,9 +494,10 @@ ROUTER_SYSTEM_MESSAGE = (
     "short follow-up to an earlier property question ('zoning is C-3', 'it's C-3', or just 'C-3', "
     "'R-1'). Choose this ONLY when both a property/use question and a designation are available, so "
     "the rules can actually be answered.\n"
-    "A GENERAL rules question with NO specific property/address is NOT zoning or zoning-answer -> "
-    "route it to website: e.g. 'how tall can a fence be', 'what are the setback requirements', 'what "
-    "is the lot coverage in the R-1 zone', 'do I need a permit for a shed'.\n"
+    "A GENERAL rules / development-standards question with NO specific property address is NOT zoning "
+    "or zoning-answer -> it is planning: e.g. 'how tall can a fence be', 'what are the setback "
+    "requirements', 'what is the lot coverage in the R-1 zone'. (A plain 'do I need a permit for a "
+    "shed' how-to is website.)\n"
     "If you are unsure, answer website."
 )
 
@@ -518,6 +536,8 @@ async def classify_domain(user_query, client, history=None):
         if not ZONING_ROUTE_ENABLED:
             return "website"                 # off -> code pipeline, as before
         return "zoning-answer" if "answer" in label else "zoning"   # LLM picks the mode
+    if "planning" in label:
+        return "planning" if PLANNING_ROUTE_ENABLED else "website"   # off -> full code pipeline
     if "permit" in label:
         return "permit"
     if "event" in label:
@@ -544,7 +564,8 @@ async def classify_request(request_body, query=None):
     `query` is the reformulated standalone question (already history-resolved), so no history is
     passed to the classifier; falls back to the raw latest message if not provided."""
     if not (PERMIT_AGENT_ENABLED or EVENTS_ENABLED or CODE_PIPELINE_ENABLED
-            or INDEX_ROUTING_ENABLED or ZONING_ROUTE_ENABLED or ARREST_ROUTE_ENABLED):
+            or INDEX_ROUTING_ENABLED or ZONING_ROUTE_ENABLED or ARREST_ROUTE_ENABLED
+            or PLANNING_ROUTE_ENABLED):
         return None
     messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
     user_query = query or _latest_user_query(messages)
@@ -758,6 +779,29 @@ async def try_zoning_answer(request_body, domain, query=None):
         return None
 
 
+async def try_planning_answer(request_body, domain, query=None):
+    """Planning-department questions (development standards, General Plan, Housing Element, specific/
+    master plans, density bonus, inclusionary housing, historic preservation, ADU, CUP) -> answered
+    ONLY from the municipal code + the Planning document library (retrieval is hard-restricted). If
+    the restricted sources don't cover it, the prompt says so and points to Planning. Returns
+    website_pipeline's (answer, context, answer_id) or None to fall through. `query` is the
+    reformulated standalone question."""
+    if not PLANNING_ROUTE_ENABLED or domain != "planning":
+        return None
+    messages = [m for m in request_body.get("messages", []) if m.get("role") != "tool"]
+    q = query or _latest_user_query(messages)
+    if not q:
+        return None
+    try:
+        client = await init_openai_client()
+        logging.info("[PLANNING] %s", q)
+        return await planning.answer_planning_query(
+            q, client, app_settings.azure_openai.model)
+    except Exception:
+        logging.exception("planning route failed; falling back")
+        return None
+
+
 async def try_website_answer(request_body, domain, query=None):
     """If enabled and the classifier says WEBSITE, answer from burbank-code-v1 (hybrid + semantic
     rerank + in-depth prompt). Returns (answer, context) or None to fall through to on-your-data.
@@ -835,6 +879,9 @@ async def complete_chat_request(request_body, request_headers):
         zoning_answer = await try_zoning_answer(request_body, domain, q)
         if zoning_answer is not None:
             return website_non_streaming_response(zoning_answer[0], zoning_answer[1], history_metadata, zoning_answer[2])
+        planning_answer = await try_planning_answer(request_body, domain, q)
+        if planning_answer is not None:
+            return website_non_streaming_response(planning_answer[0], planning_answer[1], history_metadata, planning_answer[2])
         website = await try_website_answer(request_body, domain, q)   # website/codes -> code pipeline
         if website is not None:
             return website_non_streaming_response(website[0], website[1], history_metadata, website[2])
@@ -858,6 +905,9 @@ async def stream_chat_request(request_body, request_headers):
     zoning_answer = await try_zoning_answer(request_body, domain, q)
     if zoning_answer is not None:
         return website_stream_response(zoning_answer[0], zoning_answer[1], history_metadata, zoning_answer[2])
+    planning_answer = await try_planning_answer(request_body, domain, q)
+    if planning_answer is not None:
+        return website_stream_response(planning_answer[0], planning_answer[1], history_metadata, planning_answer[2])
     website = await try_website_answer(request_body, domain, q)   # website/codes -> code pipeline
     if website is not None:
         return website_stream_response(website[0], website[1], history_metadata, website[2])

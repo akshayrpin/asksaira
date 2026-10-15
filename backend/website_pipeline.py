@@ -148,7 +148,7 @@ SYSTEM = (
 )
 
 
-async def _retrieve(vector, query, k, candidates):
+async def _retrieve(vector, query, k, candidates, filter=None):
     body = {
         "search": query,
         "vectorQueries": [{"kind": "vector", "vector": vector, "fields": "vector", "k": candidates}],
@@ -157,6 +157,8 @@ async def _retrieve(vector, query, k, candidates):
         "top": k,
         "select": "id,content,title,url,breadcrumb,page_type,content_date,source_category",
     }
+    if filter:                       # restrict the candidate set (e.g. planning -> code + 15 PDFs)
+        body["filter"] = filter
     url = f"https://{SEARCH_SVC}.search.windows.net/indexes/{CODE_INDEX}/docs/search?api-version={API}"
     async with aiohttp.ClientSession() as s:
         async with s.post(url, headers={"Content-Type": "application/json", "api-key": SEARCH_KEY},
@@ -261,11 +263,14 @@ def _check_contacts(answer, source_text):
 
 async def answer_website_query(question, client, model, k=8, candidates=50, pool=30,
                                page_char_cap=8000, total_char_cap=32000,
-                               system=None, retrieval_query=None):
+                               system=None, retrieval_query=None, retrieval_filter=None,
+                               require_hits=False):
     """Return (answer, context). Retrieve + demote to k hit chunks, then PARENT-DOCUMENT expand:
     reassemble each hit's whole page (its hit chunks first, then the page's other chunks) so an
     answer split across a page's chunks stays complete (e.g. a FAQ's contact line + its how-to
-    step). Sources become one block per page, capped so a long page can't blow up the context."""
+    step). Sources become one block per page, capped so a long page can't blow up the context.
+    `retrieval_filter` is an Azure $filter that restricts the candidate set (the planning route
+    passes one to keep retrieval to the municipal code + the Planning document library only)."""
     t0 = time.monotonic()
     _rspan = _tracer.start_span("website.retrieve") if _tracer else None
     rq = retrieval_query or question          # zoning passes a conversation-derived retrieval query
@@ -274,7 +279,12 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
     if retrieval_query is None and QUERY_EXPANSION_ENABLED:
         rq = await _expand_query(question, client, model)
     emb = await client.embeddings.create(model=EMBED_MODEL, input=[rq])
-    chunks = await _retrieve(emb.data[0].embedding, rq, pool, candidates)
+    chunks = await _retrieve(emb.data[0].embedding, rq, pool, candidates, filter=retrieval_filter)
+    # Scoped routes (planning) ask us to bail when the restricted filter matched NOTHING, so the
+    # caller can fall through to the unrestricted pipeline instead of dead-ending (a likely misroute).
+    if require_hits and not chunks:
+        logging.info("[WEBSITE] require_hits: 0 chunks under filter, returning None to fall through")
+        return None
     hits = chunks[:k] if _is_code_query(rq) else _demote_code(chunks, k)
 
     # group the hit chunks by page (source_url), preserving hit-rank order
