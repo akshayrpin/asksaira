@@ -260,7 +260,7 @@ async def init_openai_client():
 
         return azure_openai_client
     except Exception as e:
-        logging.exception("Exception in Azure OpenAI initialization", e)
+        logging.exception("Exception in Azure OpenAI initialization: %s", e)
         azure_openai_client = None
         raise e
 
@@ -288,7 +288,7 @@ async def init_cosmosdb_client():
                 enable_message_feedback=app_settings.chat_history.enable_feedback,
             )
         except Exception as e:
-            logging.exception("Exception in CosmosDB initialization", e)
+            logging.exception("Exception in CosmosDB initialization: %s", e)
             cosmos_conversation_client = None
             raise e
     else:
@@ -1443,9 +1443,13 @@ async def generate_title(conversation_messages) -> str:
     ## make sure the messages are sorted by _ts descending
     title_prompt = "Summarize the conversation so far into a 4-word or less title. Do not use any quotation marks or punctuation. Do not include any other commentary or description."
 
+    # Only user/assistant turns go to the model. A 'tool' message (our citations block) is not a
+    # valid standalone chat message -- OpenAI 400s with "messages with role 'tool' must be a response
+    # to a preceding message with 'tool_calls'" -- so strip them, as every other OpenAI call here does.
     messages = [
         {"role": msg["role"], "content": msg["content"]}
         for msg in conversation_messages
+        if msg.get("role") in ("user", "assistant") and isinstance(msg.get("content"), str)
     ]
     messages.append({"role": "user", "content": title_prompt})
 
@@ -1458,7 +1462,7 @@ async def generate_title(conversation_messages) -> str:
         title = response.choices[0].message.content
         return title
     except Exception as e:
-        logging.exception("Exception while generating title", e)
+        logging.exception("Exception while generating title: %s", e)
         return messages[-2]["content"]
 
 
