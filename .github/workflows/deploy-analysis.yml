@@ -22,8 +22,10 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment:
-      name: 'Production'         # match the other workflows' OIDC federated subject
+    # No `environment:` — so OIDC presents the branch subject
+    # (repo:akshayrpin/asksaira:ref:refs/heads/burbank), which has a federated credential,
+    # the same auth path the heyburbank App Service workflow uses. An environment subject
+    # (repo:...:environment:Production) has no matching credential and fails AADSTS700213.
     permissions:
       id-token: write            # required for azure/login OIDC
       contents: read             # required for actions/checkout
