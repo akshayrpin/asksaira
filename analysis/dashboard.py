@@ -1,3 +1,4 @@
+# redeploy trigger: picks up route labeling + date filter + CSV export (see commit history)
 """
 analysis/dashboard.py — Ask Saira retrieval observability dashboard (Streamlit).
 
