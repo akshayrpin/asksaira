@@ -61,4 +61,4 @@ async def answer_zoning_query(question, client, model, has_designation=False):
         return _ask_for_zone()
     # A zoning answer is a planning answer: ground it in the SAME restricted source set (municipal
     # code + Planning document library) via the planning route, but keep the zoning prompt.
-    return await planning.answer_planning_query(question, client, model, system=ZONING_SYSTEM)
+    return await planning.answer_planning_query(question, client, model, system=ZONING_SYSTEM, route="zoning")

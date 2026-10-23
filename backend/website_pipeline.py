@@ -264,7 +264,7 @@ def _check_contacts(answer, source_text):
 async def answer_website_query(question, client, model, k=8, candidates=50, pool=30,
                                page_char_cap=8000, total_char_cap=32000,
                                system=None, retrieval_query=None, retrieval_filter=None,
-                               require_hits=False):
+                               require_hits=False, route="website"):
     """Return (answer, context). Retrieve + demote to k hit chunks, then PARENT-DOCUMENT expand:
     reassemble each hit's whole page (its hit chunks first, then the page's other chunks) so an
     answer split across a page's chunks stays complete (e.g. a FAQ's contact line + its how-to
@@ -353,7 +353,7 @@ async def answer_website_query(question, client, model, k=8, candidates=50, pool
 
     if observability:                     # best-effort, non-blocking retrieval trace
         observability.fire_and_forget({
-            "route": "website",
+            "route": route,
             "answer_id": answer_id,        # == the assistant message id, for the feedback join
             "question": question,
             "retrieved": observability.website_retrieved(hits),

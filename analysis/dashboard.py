@@ -13,7 +13,10 @@ Env:  AZURE_COSMOSDB_ACCOUNT, AZURE_COSMOSDB_ACCOUNT_KEY, AZURE_COSMOSDB_DATABAS
 Read-only against prod data except the tag/notes fields it writes back.
 """
 
+import csv
+import io
 import os
+from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 from azure.cosmos import CosmosClient
@@ -70,7 +73,57 @@ def _feedback_map():
     return out
 
 
-def _query(route, tag, text, limit):
+def _fmt_ts(ts):
+    """ISO-8601 trace timestamp -> 'YYYY-MM-DD HH:MM' for display, best-effort."""
+    if not ts:
+        return "—"
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return str(ts)[:16]
+
+
+def _date_bounds(preset, custom_from, custom_to):
+    """Return (ts_from, ts_to) as ISO-8601 UTC strings; ts_to is exclusive (start of next day)."""
+    today = datetime.now(timezone.utc).date()
+    if preset == "All time":
+        return None, None
+    if preset == "Today":
+        start, end = today, today + timedelta(days=1)
+    elif preset == "Last 7 days":
+        start, end = today - timedelta(days=6), today + timedelta(days=1)
+    elif preset == "Last 30 days":
+        start, end = today - timedelta(days=29), today + timedelta(days=1)
+    else:  # Custom
+        start = custom_from
+        end = (custom_to + timedelta(days=1)) if custom_to else None
+    to_iso = lambda d: datetime(d.year, d.month, d.day, tzinfo=timezone.utc).isoformat() if d else None
+    return to_iso(start), to_iso(end)
+
+
+def _rows_to_csv(rows):
+    """Flatten the currently-filtered traces to CSV (one row per query). Nested retrieval is
+    summarized to chunk count + the top hit's scores; the full detail stays in the drill-down."""
+    cols = ["ts", "route", "question", "answer", "tag", "notes", "feedback",
+            "chunks_retrieved", "top_search_score", "top_rerank_score",
+            "latency_ms", "retrieve_ms", "generate_ms", "model", "answer_id", "id"]
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(cols)
+    for r in rows:
+        top = r.get("retrieved") or []
+        first = top[0] if top else {}
+        w.writerow([
+            r.get("ts", ""), r.get("route", ""), r.get("question", ""), r.get("answer", ""),
+            r.get("tag", ""), r.get("notes", ""), r.get("_fb", "") or "",
+            len(top), first.get("search_score", ""), first.get("rerank_score", ""),
+            r.get("latency_ms", ""), r.get("retrieve_ms", ""), r.get("generate_ms", ""),
+            r.get("model", ""), r.get("answer_id", ""), r.get("id", ""),
+        ])
+    return buf.getvalue()
+
+
+def _query(route, tag, text, limit, ts_from=None, ts_to=None):
     where = []
     params = []
     if route != "all":
@@ -84,6 +137,12 @@ def _query(route, tag, text, limit):
     if text:
         where.append("CONTAINS(LOWER(c.question), @q)")
         params.append({"name": "@q", "value": text.lower()})
+    if ts_from:
+        where.append("c.ts >= @ts_from")
+        params.append({"name": "@ts_from", "value": ts_from})
+    if ts_to:
+        where.append("c.ts < @ts_to")
+        params.append({"name": "@ts_to", "value": ts_to})
     clause = ("WHERE " + " AND ".join(where)) if where else ""
     sql = f"SELECT * FROM c {clause} ORDER BY c.ts DESC OFFSET 0 LIMIT {int(limit)}"
     return list(_container().query_items(sql, parameters=params, enable_cross_partition_query=True))
@@ -105,15 +164,22 @@ if not (ACCOUNT and DATABASE):
 
 with st.sidebar:
     st.header("Filters")
-    route = st.selectbox("Route", ["all", "website", "permit", "events"])
+    route = st.selectbox("Route", ["all", "website", "planning", "zoning", "permit", "events", "arrest"])
     tag = st.selectbox("Tag", ["all"] + TAGS)
     feedback = st.selectbox("Feedback", FEEDBACKS)
+    date_preset = st.selectbox("Date", ["All time", "Today", "Last 7 days", "Last 30 days", "Custom"])
+    custom_from = custom_to = None
+    if date_preset == "Custom":
+        _today = datetime.now(timezone.utc).date()
+        custom_from = st.date_input("From", value=_today - timedelta(days=7))
+        custom_to = st.date_input("To", value=_today)
     text = st.text_input("Question contains")
     limit = st.slider("Max rows", 10, 500, 100, step=10)
     if st.button("Refresh"):
         st.rerun()
 
-rows = _query(route, tag, text, limit)
+ts_from, ts_to = _date_bounds(date_preset, custom_from, custom_to)
+rows = _query(route, tag, text, limit, ts_from, ts_to)
 
 # join user feedback (thumbs) by answer_id == the assistant message id
 fb_map = _feedback_map()
@@ -125,6 +191,11 @@ if feedback != "all":
     rows = [r for r in rows if r.get("_fb_kind") == want]
 
 st.caption(f"{len(rows)} queries")
+
+if rows:
+    _fname = f"asksaira-traces_{route}_{date_preset}".replace(" ", "-").lower() + ".csv"
+    st.download_button("⬇ Download CSV (current filters)", _rows_to_csv(rows),
+                       file_name=_fname, mime="text/csv")
 
 if not rows:
     st.info("No traces yet with the selected filters.")
@@ -139,7 +210,7 @@ with left:
     for r in rows:
         badge = r.get("tag", "") or ""
         thumb = {"positive": "👍", "negative": "👎"}.get(r.get("_fb_kind"), "")
-        labels[r["id"]] = f"{thumb} [{r.get('route','?')}] {r.get('question','')[:55]}  {('· ' + badge) if badge else ''}"
+        labels[r["id"]] = f"{thumb} {_fmt_ts(r.get('ts'))} · [{r.get('route','?')}] {r.get('question','')[:48]}  {('· ' + badge) if badge else ''}"
     chosen = st.radio("Select", list(labels), format_func=lambda i: labels[i], label_visibility="collapsed")
 
 sel = next((r for r in rows if r["id"] == chosen), None)
@@ -147,6 +218,7 @@ sel = next((r for r in rows if r["id"] == chosen), None)
 with right:
     if sel:
         st.subheader(sel.get("question", ""))
+        st.caption(f"Asked {_fmt_ts(sel.get('ts'))} UTC")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Route", sel.get("route", "?"))
         c2.metric("Latency (ms)", sel.get("latency_ms", "—"))

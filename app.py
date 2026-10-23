@@ -55,6 +55,21 @@ except Exception:
     website_pipeline = None
     logging.exception("website pipeline unavailable; website questions use on-your-data")
 CODE_PIPELINE_ENABLED = bool(website_pipeline) and os.environ.get("CODE_PIPELINE_ENABLED", "0") != "0"
+try:  # best-effort query tracing for the analysis dashboard; None if unavailable
+    from backend import observability
+except Exception:
+    observability = None
+
+
+def _trace_route(route, question, answer, **extra):
+    """Best-effort trace for routes that don't flow through website_pipeline (permit, events,
+    arrest). Non-blocking and failure-swallowing; never affects the user response. Routes that go
+    through website_pipeline (website, planning, zoning) are already traced there with retrieval detail."""
+    if not (observability and question):
+        return
+    if not isinstance(answer, str) or not answer:
+        return
+    observability.fire_and_forget({"route": route, "question": question, "answer": answer, **extra})
 
 try:  # address-specific zoning / land-use answers (answered from the code index); opt-in
     from backend import zoning
@@ -655,8 +670,10 @@ async def try_permit_answer(request_body, domain, query=None):
         client = await init_openai_client()
         history = _recent_history(messages)
         logging.info("[PERMIT AGENT] handling: %s", user_query)
-        return await permit_agent.answer_permit_query(
+        ans = await permit_agent.answer_permit_query(
             user_query, client, app_settings.azure_openai.model, history=history)
+        _trace_route("permit", user_query, ans)
+        return ans
     except Exception:
         logging.exception("permit agent failed; falling back to RAG")
         return None
@@ -679,8 +696,10 @@ async def try_events_answer(request_body, domain, query=None):
         if not user_query:
             return None
         logging.info("[EVENTS] handling: %s", user_query)
-        return await events_feed.answer_events_query(
+        ans = await events_feed.answer_events_query(
             user_query, client, app_settings.azure_openai.model, datetime.date.today())
+        _trace_route("events", user_query, ans)
+        return ans
     except Exception:
         logging.exception("events feed failed; falling back to RAG")
         return None
@@ -752,6 +771,7 @@ async def try_arrest_answer(request_body, domain):
     if not ARREST_ROUTE_ENABLED or domain != "arrest":
         return None
     logging.info("[ARREST] deflect to %s", ARREST_LOG_URL)
+    _trace_route("arrest", _latest_user_query(request_body.get("messages", [])), ARREST_ANSWER)
     return ARREST_ANSWER
 
 

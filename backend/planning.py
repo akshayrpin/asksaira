@@ -69,11 +69,11 @@ PLANNING_SYSTEM = (
 )
 
 
-async def answer_planning_query(question, client, model, system=None):
+async def answer_planning_query(question, client, model, system=None, route="planning"):
     """Answer a planning question from the restricted source set (municipal code + the Planning
     document library only). `system` lets the zoning route reuse this retrieval with its own prompt.
     Returns website_pipeline's (answer, context, answer_id), or None when the restricted filter
     matched NOTHING -- a likely misroute, so the caller falls through to the full website pipeline."""
     return await website_pipeline.answer_website_query(
         question, client, model, system=system or PLANNING_SYSTEM,
-        retrieval_query=question, retrieval_filter=PLANNING_FILTER, require_hits=True)
+        retrieval_query=question, retrieval_filter=PLANNING_FILTER, require_hits=True, route=route)
