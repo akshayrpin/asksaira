@@ -105,8 +105,18 @@ async def _expand_query(question, client, model):
         logging.exception("query expansion failed; using the raw question")
     return question
 
+CITY_NAME = os.environ.get("CITY_NAME", "Burbank")
+# City Code Enforcement contact to surface on code-violation questions. Burbank's default keeps the
+# existing behavior; other cities set CODE_ENFORCEMENT_EMAIL (or leave it unset to omit the line).
+CODE_ENF_EMAIL = os.environ.get("CODE_ENFORCEMENT_EMAIL",
+                                "CodeEnf@burbankca.gov" if CITY_NAME == "Burbank" else "")
+_CE_LINE = (
+    "- When the resident asks about something related to a code violation, give the city's Code "
+    "Enforcement email " + CODE_ENF_EMAIL + ". Do not add it to unrelated answers.\n"
+) if CODE_ENF_EMAIL else ""
+
 SYSTEM = (
-    "You are the City of Burbank's assistant. Give the resident a thorough, genuinely helpful "
+    "You are the City of " + CITY_NAME + "'s assistant. Give the resident a thorough, genuinely helpful "
     "answer using ONLY the numbered sources provided. Rules:\n"
     "- Use only facts present in the sources; never invent names, phone numbers, dates, or URLs.\n"
     "- Be thorough and specific: cover the full picture the sources support, relevant conditions, "
@@ -124,8 +134,7 @@ SYSTEM = (
     "- When the sources give separate contacts for different audiences or cases (e.g. residential "
     "vs commercial, or by department or property type), include EACH one that applies; do not "
     "substitute one channel (like a form link) for another audience's contact.\n"
-    "- When the resident asks about something related to a code violation, give the city's Code "
-    "Enforcement email CodeEnf@burbankca.gov. Do not add it to unrelated answers.\n"
+    + _CE_LINE +
     "- For arrest logs, booking logs, or the police daily arrest log, INCLUDING a request for a "
     "specific day, week, month, or date range ('last week', 'yesterday', a date): these are "
     "published and updated daily on the City's arrest log page. Do NOT list or enumerate "
