@@ -328,16 +328,39 @@ async def _statuses_in(filters):
     return [(b["val"], b["count"]) for b in data.get("facets", {}).get("g", {}).get("buckets", [])]
 
 
+async def _modules_for_statuses(values, filters):
+    """For each status VALUE, the module(s) it occurs in (within the given context), via one nested
+    status->module facet. Lets the agent route a named status to where it lives (e.g. "Pending
+    Renewal" -> ["BUSINESS TAX"]) and name its category, instead of defaulting to building."""
+    if not values:
+        return {}
+    quoted = " OR ".join('"{}"'.format(v.replace('"', '\\"')) for v in values)
+    qp = [("q", "*"), ("rows", "0"), ("fq", "status:({})".format(quoted))] + _fqs(**filters)
+    facet = {"s": {"type": "terms", "field": "status", "limit": 100,
+                   "facet": {"m": {"type": "terms", "field": "module", "limit": 5}}}}
+    data = await _query(qp, facet)
+    out = {}
+    for b in data.get("facets", {}).get("s", {}).get("buckets", []):
+        out[b["val"]] = [mb["val"] for mb in b.get("m", {}).get("buckets", [])]
+    return out
+
+
 async def find_permit_status(keyword, type=None, module=None):
     """Resolve a status word (e.g. 'pending', 'active', 'expired', 'issued') to the exact stored
-    status value(s). Scoped to the type/module context when given, so the same word resolves to the
-    right status for that permit kind instead of every status that contains it."""
+    status value(s), each with the module(s) it occurs in. Scoped to the type/module context when
+    given, so the same word resolves to the right status for that permit kind instead of every
+    status that contains it. The `modules` on each match let the agent route the follow-up query to
+    where the status lives and name its category (e.g. "Pending Renewal" is a business-tax status)."""
     filters = {}
     if type:
         filters["type"] = await _resolve_type(type)
     if module:
         filters["module"] = module
-    return _match_values(keyword, await _statuses_in(filters))
+    matches = _match_values(keyword, await _statuses_in(filters))
+    mods = await _modules_for_statuses([m["value"] for m in matches], filters)
+    for m in matches:
+        m["modules"] = mods.get(m["value"], [])
+    return matches
 
 
 # ------------------------------- public API -------------------------------

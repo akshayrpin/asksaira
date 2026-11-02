@@ -32,7 +32,7 @@ Today is {today}.
 
 How to work:
 - When the user names a kind of permit in words (e.g. "solar", "ADU", "pool", "electrical"), call find_permit_type FIRST to get the exact stored type value, then use that exact value in count_permits / search_permits. If find_permit_type returns nothing, tell the user you couldn't find that permit type and ask them to rephrase; do NOT guess a type.
-- When the user describes a status in words (e.g. "pending", "active", "on hold", "void"), call find_permit_status FIRST (pass the type and/or module you're filtering on for context) to get the exact stored status value, then use it. Statuses differ by permit kind; do NOT guess a status string.
+- When the user describes a status in words (e.g. "pending", "active", "on hold", "void"), call find_permit_status FIRST (pass the type and/or module you're filtering on for context) to get the exact stored status value, then use it. Statuses differ by permit kind; do NOT guess a status string. Each match also lists the module(s) that status lives in: pass that module to the follow-up count_permits/search_permits (so a status that only exists elsewhere, e.g. the business-tax status "Pending Renewal", isn't forced into the building default and returned as zero), and name the category to the user (e.g. "'Pending Renewal' is a business-license status; there are N").
 - MILESTONE WORDS -- "issued"/"approved", "finaled"/"completed", "expired" -- name a step that has BOTH a date and a status. Read intent from phrasing:
   * "<milestone> IN a time period" (e.g. "solar permits issued in December 2025", "permits that expired last year") means the DATE the milestone happened: set date_field ("issued", "final", or "expires") plus the date range, and do NOT add a status filter. e.g. count_permits(type="Solar", date_field="issued", date_from="2025-12-01", date_to="2025-12-31").
   * "permits that ARE issued / currently in the issued status / still issued" (no timing) means the CURRENT state: filter by status only.
@@ -69,7 +69,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "find_permit_status",
-            "description": "Resolve a CURRENT-status word (e.g. 'pending', 'active', 'on hold') to the exact stored status value(s) with counts. Statuses differ by permit kind, so pass 'type' and/or 'module' for context. Call this before filtering by status when the user describes a current status. NOTE: 'issued'/'approved'/'finaled'/'completed'/'expired' tied to a time period are DATES (use a date_field on count_permits/search_permits), not statuses.",
+            "description": "Resolve a CURRENT-status word (e.g. 'pending', 'active', 'on hold') to the exact stored status value(s), each with its count and the module(s) it occurs in (e.g. 'Pending Renewal' -> modules ['BUSINESS TAX']). Statuses differ by permit kind, so pass 'type' and/or 'module' for context. Call this before filtering by status when the user describes a current status, then pass the match's module to count_permits/search_permits and tell the user which category the status belongs to. NOTE: 'issued'/'approved'/'finaled'/'completed'/'expired' tied to a time period are DATES (use a date_field on count_permits/search_permits), not statuses.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -144,11 +144,15 @@ TOOLS = [
 
 
 def _building_scope(args):
-    """Deterministic default: a general permit query (no permit type AND no module named) is scoped
-    to BUILDING PERMITS = module BUILDING minus the admin/enforcement types (Building Administration,
-    Code Enforcement, Zoning Verification). Returns (module, exclude_types, defaulted). If the model
-    set a type (e.g. Solar) or a module (business, etc.), leave its choice untouched."""
-    if not args.get("module") and not args.get("type"):
+    """Deterministic default: a general permit query (no permit type, no module, AND no status
+    named) is scoped to BUILDING PERMITS = module BUILDING minus the admin/enforcement types
+    (Building Administration, Code Enforcement, Zoning Verification). Returns
+    (module, exclude_types, defaulted). If the model set a type (e.g. Solar), a module (business,
+    etc.), or a STATUS, leave the scope open. A named status must be searched where it actually
+    occurs: e.g. "Pending Renewal" is a business-tax status and "Admin Pending" a code-enforcement
+    one, so forcing them into building (where they never appear) returned nothing and dead-ended."""
+    if (not args.get("module") and not args.get("type")
+            and not args.get("status") and not args.get("business_active")):
         return "BUILDING", pc.NON_BUILDING_TYPES, True
     return args.get("module"), None, False
 
