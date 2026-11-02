@@ -346,22 +346,18 @@ async def _modules_for_statuses(values, filters):
     return out
 
 
-async def find_permit_status(keyword, type=None, module=None):
+async def find_permit_status(keyword, type=None, department=None):
     """Resolve a status word (e.g. 'pending', 'active', 'expired', 'issued') to the exact stored
-    status value(s), each with the module(s) it occurs in. Scoped to the type/module context when
-    given, so the same word resolves to the right status for that permit kind instead of every
-    status that contains it. The `modules` on each match let the agent route the follow-up query to
-    where the status lives and name its category (e.g. "Pending Renewal" is a business-tax status)."""
+    status value(s), each with its count. Scoped to the type/department context when given, so the
+    same word resolves to the right status for that record kind instead of every status that
+    contains it. (Lynwood has no `module` field, so the Burbank module-routing is dropped; the
+    building-vs-planning split lives in `department`.)"""
     filters = {}
     if type:
         filters["type"] = await _resolve_type(type)
-    if module:
-        filters["module"] = module
-    matches = _match_values(keyword, await _statuses_in(filters))
-    mods = await _modules_for_statuses([m["value"] for m in matches], filters)
-    for m in matches:
-        m["modules"] = mods.get(m["value"], [])
-    return matches
+    if department:
+        filters["department"] = department
+    return _match_values(keyword, await _statuses_in(filters))
 
 
 # ------------------------------- public API -------------------------------
