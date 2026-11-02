@@ -1,9 +1,10 @@
 import { useContext, useState } from 'react'
 import { FontIcon, Stack, TextField } from '@fluentui/react'
+import { SendRegular } from '@fluentui/react-icons'
+
+import Send from '../../assets/Send.svg'
 
 import styles from './QuestionInput.module.css'
-import SearchButton from '../../assets/search-button.svg'
-import SearchButtonHover from '../../assets/search-button-hover.svg'
 import { ChatMessage } from '../../api'
 import { AppStateContext } from '../../state/AppProvider'
 import { resizeImage } from '../../utils/resizeImage'
@@ -21,8 +22,6 @@ interface Props {
 export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conversationId,questionInputTop }: Props) => {
   const [question, setQuestion] = useState<string>('')
   const [base64Image, setBase64Image] = useState<string | null>(null);
-  const [isActive, setIsActive] = useState<boolean>(false);
-  const isHeroInput = questionInputTop === 'Y'
 
   const appStateContext = useContext(AppStateContext)
   const OYD_ENABLED = appStateContext?.state.frontendSettings?.oyd_enabled || false;
@@ -78,13 +77,7 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
   const sendQuestionDisabled = disabled || !question.trim()
 
   return (
-    <Stack
-      horizontal
-      className={questionInputTop == "Y" ? styles.questionInputContainerTop : styles.questionInputContainer}
-      onMouseEnter={() => setIsActive(true)}
-      onMouseLeave={() => setIsActive(false)}
-      onFocus={() => setIsActive(true)}
-      onBlur={() => setIsActive(false)}>
+    <Stack horizontal className={questionInputTop == "Y" ? styles.questionInputContainerTop : styles.questionInputContainer}>
       <TextField
         className={styles.questionInputTextArea}
         placeholder={placeholder}
@@ -95,7 +88,7 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
         onChange={onQuestionChange}
         onKeyDown={onEnterPress}
       />
-      {!OYD_ENABLED && !isHeroInput && (
+      {!OYD_ENABLED && (
         <div className={styles.fileInputContainer}>
           <input
             type="file"
@@ -121,9 +114,10 @@ export const QuestionInput = ({ onSend, disabled, placeholder, clearOnSend, conv
         onClick={sendQuestion}
         onKeyDown={e => (e.key === 'Enter' || e.key === ' ' ? sendQuestion() : null)}>
         {sendQuestionDisabled ? (
-          <img src={isActive ? SearchButtonHover : SearchButton} className={styles.questionInputSendButtonDisabled} alt="Search" />
+          <SendRegular className={styles.questionInputSendButtonDisabled} />
         ) : (
-          <img src={isActive ? SearchButtonHover : SearchButton} className={styles.questionInputSendButton} alt="Search" />
+          // <img src={Send} className={styles.questionInputSendButton} alt="Send Button" />
+          <SendRegular className={styles.questionInputSendButton} />
         )}
       </div>
       {/* <div className={styles.questionInputBottomBorder} /> */}
