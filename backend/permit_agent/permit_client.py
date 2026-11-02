@@ -30,7 +30,7 @@ import aiohttp
 
 PERMITS_API_BASE = os.environ.get(
     "PERMITS_API_BASE",
-    "http://burbank.edgesoftinc.com:7337/solr/load_initial_burbank/query",
+    "http://lynwood.edgesoftinc.com:7337/solr/lynwood_activity_core/query",
 )
 TIMEOUT = 25
 
@@ -61,7 +61,7 @@ PLANNING_MODULE = "PLANNING"
 # Types never surfaced UNDER PLANNING -- excluded from Planning lists/counts/breakdowns and from a
 # direct lookup of a Planning permit of this type (it returns not-found). ONLY scoped to Planning;
 # the same type elsewhere, and every other Planning permit, shows normally.
-PLANNING_EXCLUDE_TYPES = ["Project Administration"]
+PLANNING_EXCLUDE_TYPES = []  # Lynwood: no "Project Administration" type to hide under Planning
 
 
 def _is_code_enforcement(doc):
@@ -69,8 +69,9 @@ def _is_code_enforcement(doc):
 
 
 def _is_planning(doc):
-    return (str(doc.get("module", "")).strip().upper() == PLANNING_MODULE
-            or str(doc.get("act_nbr", "")).strip().upper().startswith("PL"))
+    # Lynwood has no `module` field; the building-vs-planning split is the `department` field
+    # (values "CDD - Building and Safety" vs "CDD - Planning").
+    return str(doc.get("department", "")).strip() == "CDD - Planning"
 
 
 def _is_planning_excluded(doc):
