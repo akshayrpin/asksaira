@@ -73,26 +73,10 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
   const createCitationFilepath = (citation: Citation, index: number, truncate: boolean = false) => {
     let citationFilename = ''
 
-    // Code/website-pipeline citations carry a real source URL. Show a clean,
-    // link-like label: the page/section title with leftover markdown and the
-    // meaningless "- Part N" chunk suffix stripped (fall back to the hostname).
+    // Code/website-pipeline citations carry a real source URL. Show the full URL as the
+    // label (same as Burbank's reconstructed-URL citations), so it reads as a real link.
     if (citation.url && /^https?:\/\//i.test(citation.url)) {
-      let label = (citation.title || citation.filepath || '')
-        .replace(/\*+/g, '')
-        .replace(/\s*[-–]\s*$/, '')
-        .replace(/[\s:>•|)]+$/, '')
-        .trim()
-      if (!label) {
-        try {
-          label = new URL(citation.url).hostname.replace(/^www\./, '')
-        } catch {
-          label = citation.url
-        }
-      }
-      if (truncate && label.length > filePathTruncationLimit) {
-        label = `${label.substring(0, filePathTruncationLimit - 1)}…`
-      }
-      return label
+      return citation.url
     }
 
     if (citation.filepath) {
