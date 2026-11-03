@@ -719,6 +719,12 @@ const Chat = () => {
   }, [showLoadingMessage, processMessages])
 
   const onShowCitation = (citation: Citation) => {
+    // Prefer opening the real source page in a new tab; fall back to the side
+    // panel only when there's no openable URL (e.g. blob-only citations).
+    if (citation.url && !citation.url.includes('blob.core')) {
+      window.open(citation.url, '_blank')
+      return
+    }
     setActiveCitation(citation)
     setIsCitationPanelOpen(true)
   }
