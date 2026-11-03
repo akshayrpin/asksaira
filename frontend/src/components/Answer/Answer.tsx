@@ -73,6 +73,28 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
   const createCitationFilepath = (citation: Citation, index: number, truncate: boolean = false) => {
     let citationFilename = ''
 
+    // Code/website-pipeline citations carry a real source URL. Show a clean,
+    // link-like label: the page/section title with leftover markdown and the
+    // meaningless "- Part N" chunk suffix stripped (fall back to the hostname).
+    if (citation.url && /^https?:\/\//i.test(citation.url)) {
+      let label = (citation.title || citation.filepath || '')
+        .replace(/\*+/g, '')
+        .replace(/\s*[-–]\s*$/, '')
+        .replace(/[\s:>•|)]+$/, '')
+        .trim()
+      if (!label) {
+        try {
+          label = new URL(citation.url).hostname.replace(/^www\./, '')
+        } catch {
+          label = citation.url
+        }
+      }
+      if (truncate && label.length > filePathTruncationLimit) {
+        label = `${label.substring(0, filePathTruncationLimit - 1)}…`
+      }
+      return label
+    }
+
     if (citation.filepath) {
       const part_i = citation.part_index ?? (citation.chunk_id ? parseInt(citation.chunk_id) + 1 : '')
       if (truncate && citation.filepath.length > filePathTruncationLimit) {
@@ -399,6 +421,22 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
                     {createCitationFilepath(citation, idx, true)}
                   </a>
                 )
+              } else if (citation.url != null && /^https?:\/\//i.test(citation.url)) {
+                return (
+                  <a
+                    aria-label={createCitationFilepath(citation, ++idx)}
+                    href={citation.url}
+                    tabIndex={0}
+                    role="link"
+                    key={idx}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    title={citation.url}
+                    className={styles.citationContainer}>
+                    <div className={styles.citation}>{idx}</div>
+                    {createCitationFilepath(citation, idx, true)}
+                  </a>
+                )
               } else {
                 return (
                   <span
@@ -414,7 +452,7 @@ export const Answer = ({ answer, onCitationClicked, onExectResultClicked }: Prop
                     {createCitationFilepath(citation, idx, true)}
                   </span>
                 )
-              }  
+              }
             })}
           </div>
         )}
