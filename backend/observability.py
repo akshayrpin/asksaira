@@ -35,6 +35,7 @@ ACCOUNT = os.environ.get("AZURE_COSMOSDB_ACCOUNT", "")
 KEY = os.environ.get("AZURE_COSMOSDB_ACCOUNT_KEY", "")
 DATABASE = os.environ.get("AZURE_COSMOSDB_DATABASE", "")
 CONTAINER = os.environ.get("AZURE_COSMOSDB_TRACES_CONTAINER", "query_traces")
+CONV_CONTAINER = os.environ.get("AZURE_COSMOSDB_CONVERSATIONS_CONTAINER", "conversations")
 ENABLED = os.environ.get("QUERY_TRACING_ENABLED", "true").lower() == "true"
 
 _client = None
@@ -106,3 +107,42 @@ def fire_and_forget(record):
         asyncio.get_running_loop().create_task(log_trace(record))
     except RuntimeError:
         pass                              # no running loop -> skip silently
+
+
+# --------------------------------------------------------------------------- reads
+# The staff console (/admin/*) reads back what we write here. All Cosmos access stays in this
+# module so there is a single client/credential owner; the admin layer never opens its own.
+
+async def read_traces(ts_from=None, limit=20000):
+    """Return query_traces as a flat list (newest first), optionally only ts >= ts_from.
+    Returns [] if tracing isn't configured, so the caller degrades to an empty dashboard."""
+    container = await _get_container()
+    if container is None:
+        return []
+    where = "WHERE c.ts >= @ts_from" if ts_from else ""
+    params = [{"name": "@ts_from", "value": ts_from}] if ts_from else []
+    sql = f"SELECT * FROM c {where} ORDER BY c.ts DESC OFFSET 0 LIMIT {int(limit)}"
+    try:
+        return [item async for item in container.query_items(query=sql, parameters=params)]
+    except Exception as e:                # noqa: BLE001
+        logging.warning("read_traces failed (ignored): %s", e)
+        return []
+
+
+async def read_feedback_map():
+    """message_id -> feedback for rated assistant messages in the conversations container.
+    A trace's answer_id is that message id, so this backfills thumbs up/down onto traces."""
+    await _get_container()                # ensure _client is initialized
+    if _client is None:
+        return {}
+    sql = ("SELECT c.id, c.feedback FROM c WHERE c.type='message' AND c.role='assistant' "
+           "AND IS_DEFINED(c.feedback) AND c.feedback != '' AND c.feedback != 'neutral'")
+    out = {}
+    try:
+        conv = _client.get_database_client(DATABASE).get_container_client(CONV_CONTAINER)
+        async for m in conv.query_items(query=sql):
+            if m.get("id"):
+                out[m["id"]] = m.get("feedback")
+    except Exception as e:                # noqa: BLE001
+        logging.warning("read_feedback_map failed (ignored): %s", e)
+    return out

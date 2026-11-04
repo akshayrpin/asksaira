@@ -158,6 +158,27 @@ async def assets(path):
     return await send_from_directory("static/assets", path)
 
 
+# ---------------------------------------------------------------------------
+# Staff console (/admin/*) — the ONLY authenticated surface. Login + roles are
+# stubbed open during dev; when they land, gate every /admin/* route in one
+# place here (a before_request on the prefix). Public chat routes stay anonymous.
+# ---------------------------------------------------------------------------
+@bp.route("/admin")
+@bp.route("/admin/")
+async def admin_console():
+    # TODO(auth): require staff identity once login/roles land.
+    return await send_from_directory("staff_console", "index.html")
+
+
+@bp.route("/admin/insights", methods=["GET"])
+async def admin_insights():
+    # TODO(auth): require staff identity once login/roles land.
+    from backend.admin.insights_api import build_insights, window_days
+    days = window_days(request.args.get("window", "28"))
+    payload = await build_insights(days)
+    return jsonify(payload)
+
+
 # Debug settings
 DEBUG = os.environ.get("DEBUG", "false")
 if DEBUG.lower() == "true":

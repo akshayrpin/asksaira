@@ -1,0 +1,867 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Hey Burbank Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap">
+<style>
+  /* Ask Saira brand: warm cream surfaces, teal/sage green accent (NO blue), near-black green ink,
+     soft pastel tints, humanist sans (Hanken Grotesk). Single light theme to match the product. */
+  :root {
+    --bg: #f5f4ef; --surface: #ffffff; --surface-2: #faf9f4; --surface-3: #efece2;
+    --border: #e7e3d8; --border-strong: #d8d3c5;
+    --ink: #1b2a25; --muted: #5f6b64; --faint: #949d95;
+    --accent: #2f5751; --accent-strong: #26433f; --accent-2: #3d7d74; --accent-ink: #ffffff;
+    --accent-soft: #dfeae4;
+    --ok: #2f7d5b; --warn: #a9772a; --bad: #b4553a; --info: #2f5751;
+    --radius: 8px; --radius-sm: 6px;
+    --shadow: 0 1px 2px rgba(27,42,37,.05), 0 1px 3px rgba(27,42,37,.05);
+    --shadow-pop: 0 8px 26px rgba(27,42,37,.17);
+    --font: "Hanken Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "Segoe UI Mono", Consolas, ui-monospace, Menlo, monospace;
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font); margin: 0; }
+  .cx { font-variant-numeric: tabular-nums; }
+  button { font-family: inherit; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  #app { display: grid; grid-template-columns: 240px 1fr; min-height: 100%; }
+
+  /* ---------- sidebar ---------- */
+  .side {
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; position: sticky; top: 0; align-self: start;
+    height: 100vh; height: 100dvh;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; padding: 20px 18px 16px; }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 9px; flex: none;
+    background: var(--accent-strong); color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-size: 14px; letter-spacing: 0;
+  }
+  .brand-name { font-weight: 800; font-size: 16px; letter-spacing: -.01em; }
+  .brand-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+  .nav { display: flex; flex-direction: column; gap: 2px; padding: 6px 12px; overflow: auto; }
+  .nav-label { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--faint); padding: 14px 8px 5px; font-weight: 700; }
+  .nav-item {
+    display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+    background: none; border: 0; color: var(--muted); padding: 9px 11px;
+    border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 500; position: relative;
+  }
+  .nav-item svg { width: 17px; height: 17px; flex: none; }
+  .nav-item:hover { background: var(--surface-3); color: var(--ink); }
+  .nav-item[aria-current="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .nav-item[aria-current="true"]::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px;
+    width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+  .nav-item .badge-n {
+    margin-left: auto; background: var(--accent-soft); color: var(--accent);
+    font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; }
+  .side-foot { margin-top: auto; padding: 13px 16px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft);
+    display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--accent); flex: none; }
+  .who { font-size: 12.5px; font-weight: 600; line-height: 1.25; }
+  .who small { display: block; color: var(--muted); font-weight: 400; font-size: 11px; }
+  .powered { margin-left: auto; font-size: 10.5px; color: var(--muted); text-align: right; line-height: 1.3; }
+  .powered b { font-weight: 800; color: var(--accent-2); display: block; }
+
+  /* ---------- main ---------- */
+  .main { min-width: 0; display: flex; flex-direction: column; }
+  .topbar {
+    position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+    padding: 17px clamp(16px, 3vw, 32px); display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
+  }
+  .topbar h1 { font-size: 21px; font-weight: 800; margin: 0; letter-spacing: -.02em; }
+  .topbar p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+  .topbar .spacer { flex: 1 1 auto; }
+  .content { padding: clamp(16px, 3vw, 32px); display: flex; flex-direction: column; gap: 18px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 7px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink);
+    font-size: 13px; font-weight: 600; padding: 8px 14px; }
+  .btn:hover { background: var(--surface-2); }
+  .btn svg { width: 15px; height: 15px; }
+  .btn.primary { background: var(--accent-strong); border: 0; color: #fff; }
+  .btn.primary:hover { background: var(--accent); }
+  .btn.sm { padding: 5px 11px; font-size: 12px; font-weight: 600; }
+  .btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+  .btn.ghost:hover { background: var(--surface-3); color: var(--ink); }
+  .btn.danger:hover { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--border-strong)); }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); }
+  .panel-head { padding: 14px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .panel-head h2 { font-size: 15px; font-weight: 700; margin: 0; }
+  .panel-head .sub { font-size: 12.5px; color: var(--muted); }
+  .panel-body { padding: 16px; }
+
+  .section-title { font-size: 12.5px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em; margin: 4px 0; }
+
+  /* badges */
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600;
+    padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .b-ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, #fff); }
+  .b-warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, #fff); }
+  .b-bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, #fff); }
+  .b-mute { color: var(--muted); background: var(--surface-3); }
+  .b-info { color: var(--info); background: var(--accent-soft); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: var(--radius-sm); font-size: 11.5px; font-weight: 500;
+    background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+
+  /* KPI strip */
+  .kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%,8.5rem),1fr)); }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 15px 16px; box-shadow: var(--shadow); }
+  .kpi .k-label { font-size: 12px; color: var(--muted); }
+  .kpi .k-val { font-size: 26px; font-weight: 800; letter-spacing: -.025em; margin-top: 5px; }
+  .kpi .k-delta { font-size: 11.5px; margin-top: 3px; color: var(--muted); }
+  .kpi .k-delta.good { color: var(--ok); } .kpi .k-delta.bad { color: var(--bad); }
+  .kpi.attn { border-color: color-mix(in srgb, var(--warn) 38%, var(--border)); background: color-mix(in srgb, var(--warn) 5%, #fff); }
+  .kpi.attn .k-val { color: var(--warn); }
+
+  .grid2 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%,21rem),1fr)); }
+
+  /* CSS bar chart */
+  .bars { display: flex; flex-direction: column; gap: 11px; }
+  .bar-row { display: grid; grid-template-columns: 1fr; gap: 4px; }
+  .bar-top { display: flex; justify-content: space-between; font-size: 12.5px; gap: 10px; }
+  .bar-top .lbl { color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-top .num { color: var(--muted); font-weight: 700; flex: none; }
+  .bar-track { height: 8px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; background: var(--accent); }
+
+  /* tables */
+  .tbl-wrap { overflow-x: auto; }
+  table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.tbl th { text-align: left; font-weight: 700; color: var(--muted); font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .04em; padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.tbl td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  table.tbl tr:last-child td { border-bottom: 0; }
+  table.tbl tbody tr:hover { background: var(--surface-2); }
+  .src-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .src-ico { width: 30px; height: 30px; border-radius: var(--radius-sm); flex: none; display: grid; place-items: center;
+    background: var(--surface-3); color: var(--muted); }
+  .src-ico svg { width: 15px; height: 15px; }
+  .src-ico.web { color: var(--accent); background: var(--accent-soft); }
+  .src-ico.pdf { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, #fff); }
+  .src-ico.code { color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 15%, #fff); }
+  .src-text { min-width: 0; }
+  .src-text .t1 { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42ch; }
+  .src-text .t2 { font-family: var(--mono); font-size: 11px; color: var(--faint);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48ch; }
+  .num-cell { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+  .icon-btn { width: 30px; height: 30px; border: 1px solid var(--border); background: var(--surface);
+    border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--muted); }
+  .icon-btn:hover { color: var(--accent); border-color: var(--border-strong); background: var(--surface-2); }
+  .icon-btn.danger:hover { color: var(--bad); }
+  .icon-btn svg { width: 15px; height: 15px; }
+
+  /* toolbar + chips */
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .search { position: relative; flex: 1 1 200px; min-width: 160px; }
+  .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--faint); }
+  .search input { width: 100%; padding: 8px 10px 8px 32px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong);
+    background: var(--surface); color: var(--ink); font-size: 13px; font-family: inherit; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted);
+    border-radius: 999px; padding: 6px 13px; font-size: 12.5px; font-weight: 500; }
+  .chip:hover { color: var(--ink); }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip .c-n { opacity: .7; margin-left: 4px; }
+
+  .sumstrip { display: flex; gap: 24px; flex-wrap: wrap; padding: 2px 2px 0; }
+  .sumstrip .s { font-size: 12.5px; color: var(--muted); }
+  .sumstrip .s b { display: block; font-size: 19px; color: var(--ink); font-weight: 800; letter-spacing: -.01em; }
+
+  .addform { border: 1px dashed var(--border-strong); border-radius: var(--radius); padding: 14px 16px;
+    display: none; gap: 12px; flex-direction: column; background: var(--surface-2); }
+  .addform.open { display: flex; }
+  .addform .seg { display: flex; gap: 6px; }
+  .field { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .field input[type=text] { flex: 1 1 260px; min-width: 180px; padding: 9px 11px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); font-size: 13px; font-family: var(--mono); }
+
+  /* gap cards */
+  .gaps { display: flex; flex-direction: column; gap: 12px; }
+  .gap { display: grid; grid-template-columns: 1fr auto; gap: 10px 16px; align-items: start;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 16px; box-shadow: var(--shadow); }
+  .gap .q { font-size: 14.5px; font-weight: 700; }
+  .gap .meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+  .gap .meta .why { color: var(--bad); }
+  .gap .fix { margin-top: 10px; font-size: 13px; }
+  .gap .fix span { color: var(--muted); }
+  .gap .right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  .conf { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: var(--radius-sm); }
+
+  /* answer review */
+  .areview { display: flex; flex-direction: column; gap: 12px; }
+  .ar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 16px; box-shadow: var(--shadow); }
+  .ar .q { font-weight: 700; font-size: 14px; }
+  .ar .ans { margin-top: 8px; font-size: 13px; color: var(--muted); background: var(--surface-2);
+    border-left: 3px solid var(--border-strong); padding: 9px 12px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+  .ar .foot { display: flex; align-items: center; gap: 10px; margin-top: 11px; flex-wrap: wrap; }
+  .ar .cites { font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+  .composer { margin-top: 11px; display: none; flex-direction: column; gap: 8px; }
+  .composer.open { display: flex; }
+  .composer textarea { width: 100%; min-height: 72px; resize: vertical; padding: 10px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+
+  /* routing */
+  .route { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 15px 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+  .route .r-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .route .r-name { font-weight: 800; font-size: 14.5px; }
+  .route .r-flow { font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
+  .route textarea { width: 100%; min-height: 56px; resize: vertical; padding: 9px 11px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--ink); font: inherit; font-size: 12.5px; }
+
+  .audit { font-size: 13px; }
+  .audit td .a-who { font-weight: 600; }
+  .ts { color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .note { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .note svg { width: 14px; height: 14px; flex: none; color: var(--faint); }
+
+  /* toast */
+  #toasts { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 50;
+    display: flex; flex-direction: column; gap: 8px; align-items: center; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .toast { background: var(--ink); color: #fff; padding: 9px 16px; border-radius: 999px;
+    font-size: 13px; font-weight: 500; box-shadow: var(--shadow-pop); animation: tin .2s ease-out; }
+  @keyframes tin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .demo-flag { font-size: 11px; color: var(--faint); display: inline-flex; align-items: center; gap: 5px; }
+
+  @media (max-width: 860px) {
+    #app { grid-template-columns: 1fr; }
+    .side { position: sticky; top: 0; height: auto; flex-direction: column; z-index: 8; }
+    .brand { padding: 12px 16px; }
+    .brand-sub { display: none; }
+    .nav { flex-direction: row; overflow-x: auto; padding: 0 10px 8px; gap: 4px; }
+    .nav-label { display: none; }
+    .nav-item { white-space: nowrap; padding: 7px 11px; }
+    .nav-item[aria-current="true"]::before { display: none; }
+    .side-foot { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+</style>
+
+<div id="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">HB</div>
+      <div>
+        <div class="brand-name">Hey Burbank</div>
+        <div class="brand-sub">Staff console</div>
+      </div>
+    </div>
+    <nav class="nav" id="nav" aria-label="Sections">
+      <div class="nav-label">Operate</div>
+      <button class="nav-item" data-tab="overview" aria-current="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h8V3H3zM13 21h8V3h-8zM3 21h8v-6H3z"/></svg>
+        <span class="t">Overview</span></button>
+      <button class="nav-item" data-tab="sources">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2M4 7h16M4 7v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7M9 11h6M9 15h6"/></svg>
+        <span class="t">Sources</span></button>
+      <button class="nav-item" data-tab="review">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span class="t">Review queue</span><span class="badge-n">9</span></button>
+      <div class="nav-label">Configure</div>
+      <button class="nav-item" data-tab="routing">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="12" r="3"/><path d="M9 6h6a3 3 0 0 1 3 3M9 18h6a3 3 0 0 0 3-3"/></svg>
+        <span class="t">Routing</span></button>
+      <button class="nav-item" data-tab="access">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6z"/></svg>
+        <span class="t">Access &amp; audit</span></button>
+    </nav>
+    <div class="side-foot">
+      <div class="avatar">SB</div>
+      <div class="who">S. Bharadwaj<small>Admin</small></div>
+      <div class="powered">powered by<b>Ask Saira</b></div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="tabTitle">Overview</h1>
+        <p id="tabSub">Last 28 days across every channel. Sample data for this mockup.</p>
+      </div>
+      <div class="spacer"></div>
+      <div id="tabActions"></div>
+    </div>
+    <div class="content">
+      <!-- OVERVIEW -->
+      <section data-panel="overview">
+        <div class="kpis" style="margin-bottom:18px" id="kpiStrip"></div>
+        <div class="grid2">
+          <div class="panel">
+            <div class="panel-head"><h2>Conversations per day</h2><span class="sub">line = resolved without staff</span></div>
+            <div class="panel-body"><div id="spark"></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>How questions route</h2><span class="sub">matches the live classifier</span></div>
+            <div class="panel-body"><div class="bars" id="routeBars"></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>What residents ask about</h2><span class="sub">questions by topic</span></div>
+            <div class="panel-body"><div class="bars" id="topicBars"></div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Needs attention</h2><span class="sub">jump to the work</span></div>
+            <div class="panel-body" id="attnList" style="display:flex;flex-direction:column;gap:10px"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SOURCES -->
+      <section data-panel="sources" hidden>
+        <div class="sumstrip" id="srcSummary"></div>
+        <div class="addform" id="addForm">
+          <div class="field">
+            <div class="seg">
+              <button class="chip" id="addKindWeb" aria-pressed="true" data-kind="web">Web page</button>
+              <button class="chip" id="addKindPdf" aria-pressed="false" data-kind="pdf">PDF upload</button>
+            </div>
+            <input type="text" id="addUrl" placeholder="https://www.burbankca.gov/...">
+            <button class="btn primary sm" id="addSubmit">Crawl &amp; index</button>
+            <button class="btn ghost sm" id="addCancel">Cancel</button>
+          </div>
+          <div class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>New sources are chunked, contextualized and embedded into burbank-code-v1. A re-crawl refreshes in place.</div>
+        </div>
+        <div class="panel" style="margin-top:14px">
+          <div class="panel-head">
+            <div class="toolbar" style="flex:1">
+              <div class="search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="text" id="srcSearch" placeholder="Search sources">
+              </div>
+              <div class="chips" id="srcChips"></div>
+            </div>
+          </div>
+          <div class="tbl-wrap">
+            <table class="tbl">
+              <thead><tr>
+                <th>Source</th><th>Type</th><th class="num-cell">Chunks</th><th>Last crawled</th><th>Status</th><th>Health</th><th></th>
+              </tr></thead>
+              <tbody id="srcBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- REVIEW QUEUE (gaps + answer review merged) -->
+      <section data-panel="review" hidden>
+        <div class="toolbar" style="margin-bottom:4px">
+          <div class="chips" id="qChips"></div>
+          <span class="demo-flag">Flagged automatically: low reranker score, no citation, or a superseded source.</span>
+        </div>
+        <div class="gaps" id="queueList"></div>
+        <div class="section-title" style="margin-top:16px;display:flex;align-items:center;gap:10px">
+          <span>Canonical answers <span style="font-weight:400;text-transform:none;letter-spacing:0">staff-authored, returned verbatim and override retrieval</span></span>
+          <button class="btn primary sm" id="canonAddToggle" style="margin-left:auto;text-transform:none;letter-spacing:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add canonical answer</button>
+        </div>
+        <div class="addform" id="canonForm" style="margin-top:4px">
+          <div class="field"><input type="text" id="canonQ" placeholder="Question residents ask..." style="font-family:var(--font)"></div>
+          <div class="field"><input type="text" id="canonA" placeholder="The exact answer they should get, written as staff want it returned..." style="font-family:var(--font)"></div>
+          <div class="field">
+            <input type="text" id="canonOwner" placeholder="Owner (e.g. Planning)" style="flex:0 1 200px;font-family:var(--font)">
+            <button class="btn primary sm" id="canonSubmit">Save canonical answer</button>
+            <button class="btn ghost sm" id="canonCancel">Cancel</button>
+          </div>
+          <div class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>When a resident asks a question that matches this, they get this answer verbatim instead of a retrieved one.</div>
+        </div>
+        <div class="panel" style="margin-top:12px"><div class="tbl-wrap"><table class="tbl">
+          <thead><tr><th>Question</th><th>Answer residents get</th><th>Owner</th><th>Added</th><th></th></tr></thead>
+          <tbody id="canonBody"></tbody>
+        </table></div></div>
+      </section>
+
+      <!-- ROUTING -->
+      <section data-panel="routing" hidden>
+        <p class="note" style="margin-bottom:4px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>The classifier reads each question and sends it to one route, using the rule and example questions below. Edit them to fix misrouting, no redeploy needed.</p>
+        <div class="toolbar" style="margin-bottom:10px">
+          <button class="btn primary sm" id="routeAddToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Request new route</button>
+          <span class="demo-flag">Adding a route changes how questions are classified, so a new route goes live only after Ask Saira reviews it.</span>
+        </div>
+        <div class="addform" id="routeForm" style="margin-bottom:12px">
+          <div class="field"><input type="text" id="routeName" placeholder="Route name (e.g. Business licensing)" style="flex:0 1 260px;font-family:var(--font)"></div>
+          <div class="field"><input type="text" id="routeRule" placeholder="Routes here when... describe the questions this route should catch" style="font-family:var(--font)"></div>
+          <div class="field"><input type="text" id="routeEx" placeholder="Example questions, comma separated" style="font-family:var(--font)"></div>
+          <div class="field">
+            <input type="text" id="routeSrc" placeholder="Grounded sources (e.g. business license PDFs)" style="flex:0 1 260px;font-family:var(--font)">
+            <button class="btn primary sm" id="routeSubmit">Submit for approval</button>
+            <button class="btn ghost sm" id="routeCancel">Cancel</button>
+          </div>
+          <div class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>This is sent to Ask Saira. It stays pending and does not affect live routing until approved.</div>
+        </div>
+        <div id="routeList" style="display:flex;flex-direction:column;gap:14px"></div>
+      </section>
+
+      <!-- ACCESS -->
+      <section data-panel="access" hidden>
+        <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr))">
+          <div class="kpi"><div class="k-label">Admins</div><div class="k-val cx">2</div><div class="k-delta">full control</div></div>
+          <div class="kpi"><div class="k-label">Editors</div><div class="k-val cx">6</div><div class="k-delta">sources, gaps, answers</div></div>
+          <div class="kpi"><div class="k-label">Viewers</div><div class="k-val cx">14</div><div class="k-delta">read-only analytics</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Audit log</h2><span class="sub">every change to sources, answers and routing</span></div>
+          <div class="tbl-wrap"><table class="tbl audit">
+            <thead><tr><th>When</th><th>Who</th><th>Action</th></tr></thead>
+            <tbody id="auditBody"></tbody>
+          </table></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+(function () {
+  const $ = (s, r) => (r || document).querySelector(s);
+  const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+  const fmt = (n) => n.toLocaleString('en-US');
+
+  function toast(msg) {
+    const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+    $('#toasts').appendChild(t); setTimeout(() => t.remove(), 2600);
+  }
+
+  // ---------- data (sample) ----------
+  // Overview data: seeded with mockup sample, overwritten by loadInsights() when the backend
+  // (/admin/insights) is reachable. `let` so the adapter can swap in live values and re-render.
+  let kpis = [
+    { label: 'Conversations', val: '4,210', delta: '+12% vs prior 28d', good: true },
+    { label: 'Self-serve resolution', val: '86%', delta: '+3 pts', good: true },
+    { label: 'Answers with citations', val: '91%', delta: '+2 pts', good: true },
+    { label: 'Flagged for review', val: '9', delta: '2 need a canonical answer', attn: true },
+    { label: 'Stale sources', val: '2', delta: 'need review', attn: true },
+  ];
+  let convos = [182,175,164,104,92,188,179,186,171,158,101,88,193,184,190,177,162,108,95,201,188,195,182,169,112,99,207,194];
+  let resolved = convos.map((c, i) => Math.round(c * (0.84 + (i % 5) * 0.006)));
+  let sparkFrom = 'Sep 23', sparkTo = 'Oct 20';
+  let routes = [
+    { label: 'Website (general)', n: 2540 }, { label: 'Permits', n: 690 },
+    { label: 'Planning', n: 430 }, { label: 'Events', n: 330 }, { label: 'Zoning', n: 220 },
+  ];
+  let topics = [
+    { label: 'Permits & inspections', n: 742 }, { label: 'Trash & recycling', n: 613 },
+    { label: 'Parks, rec & classes', n: 548 }, { label: 'Business license & tax', n: 431 },
+    { label: 'Zoning & planning', n: 389 }, { label: 'Water & utility billing', n: 357 },
+  ];
+  const sources = [
+    { name: 'Burbank Municipal Code (eCode360)', url: 'ecode360.com/BU2075', type: 'code', chunks: 4120, crawled: 'Oct 18', status: 'live', health: 'ok' },
+    { name: 'burbankca.gov (full site crawl)', url: 'www.burbankca.gov', type: 'web', chunks: 3850, crawled: 'Oct 19', status: 'live', health: 'ok' },
+    { name: 'Adopted Burbank Housing Element', url: 'Adopted+Burbank+Housing+Element.pdf', type: 'pdf', chunks: 212, crawled: 'Oct 12', status: 'live', health: 'ok' },
+    { name: 'Burbank Center Plan', url: 'Burbank+Center+Plan.pdf', type: 'pdf', chunks: 168, crawled: 'Sep 30', status: 'live', health: 'ok' },
+    { name: 'Media District Specific Plan', url: 'Media+District+Specific+Plan.pdf', type: 'pdf', chunks: 143, crawled: 'Sep 30', status: 'live', health: 'ok' },
+    { name: 'Density Bonus Regulations', url: 'density-bonus-regulations-001.pdf', type: 'pdf', chunks: 54, crawled: 'Oct 12', status: 'live', health: 'ok' },
+    { name: 'ADU Handout (updated 4-10-2024)', url: 'adu-handout-updated-4-10-2024.pdf', type: 'pdf', chunks: 22, crawled: 'Oct 12', status: 'live', health: 'review' },
+    { name: 'Fee Schedule FY2026-27 (current)', url: 'fee-schedule-fy2026-27.pdf', type: 'pdf', chunks: 38, crawled: 'Oct 20', status: 'live', health: 'ok' },
+    { name: 'Events & city calendar', url: 'www.burbankca.gov/calendar', type: 'web', chunks: 64, crawled: 'Oct 20', status: 'live', health: 'ok' },
+    { name: 'Trash & Recycling Guide (2022)', url: 'trash-recycling-guide-2022.pdf', type: 'pdf', chunks: 41, crawled: 'Mar 2024', status: 'stale', health: 'review' },
+    { name: 'Permits landing page', url: 'www.burbankca.gov/.../permits', type: 'web', chunks: 0, crawled: 'Oct 19', status: 'failed', health: 'bad' },
+    { name: 'Fee Reso FY2024-25 + 13 older', url: 'burbank-fee-reso-fy2024-25.pdf', type: 'pdf', chunks: 0, crawled: 'Oct 21', status: 'excluded', health: 'super' },
+  ];
+  // Review-queue gaps: sample until loadInsights() swaps in live gaps from /admin/insights.
+  let queue = [
+    { q: "What's the fee for a solar permit in 2026?", asks: 64, why: 'No current fee schedule was indexed when asked', conf: 38, fix: 'content', detail: 'Index the FY2026-27 fee schedule', state: 'new' },
+    { q: 'Can I keep backyard chickens?', asks: 57, why: 'No matching municipal code section', conf: 31, fix: 'content', detail: 'Add the BMC animal-keeping section', state: 'new' },
+    { q: 'What zone is my property in?', asks: 52, why: 'The bot cannot look up a resident parcel from the code', conf: 40, fix: 'canonical', detail: 'Pin an answer that routes to the parcel GIS lookup', ans: '"Burbank has several zoning designations including R-1, R-2, commercial and industrial..." (never identifies the resident’s parcel)', cites: '[BMC § 31-601]', state: 'assigned' },
+    { q: 'How do I appeal a code enforcement notice?', asks: 49, why: 'Thin coverage, no citation', conf: 44, fix: 'content', detail: 'Add a code-enforcement appeals page', state: 'assigned' },
+    { q: 'What are the rules for short-term rentals?', asks: 46, why: 'Conflicting sources', conf: 41, fix: 'content', detail: 'Reconcile the two STR pages', state: 'new' },
+    { q: 'How much is a building permit?', asks: 44, why: 'Confident answer, but cited a superseded fee schedule (FY2024-25)', conf: 88, staleSource: true, fix: 'content', detail: 'Exclude the old reso and confirm FY2026-27 is indexed', ans: '"Building permit fees start at $154 per the FY2024-25 schedule..."', cites: '[fee-reso-fy2024-25.pdf]', state: 'new' },
+    { q: 'What are your hours and is City Hall open today?', asks: 41, why: 'Gave generic hours, missed the holiday schedule', conf: 45, fix: 'canonical', detail: 'Pin the hours plus a holiday-closure link', ans: '"City Hall is open Monday to Friday, 8am to 5pm." (did not account for the holiday schedule)', state: 'new' },
+    { q: 'Is there rent control in Burbank?', asks: 38, why: 'No matching source', conf: 29, fix: 'content', detail: 'Add a housing / rent-stabilization FAQ', state: 'new' },
+    { q: 'How do I get a film permit?', asks: 33, why: 'Routed to website, no permit page', conf: 47, fix: 'content', detail: 'Add the film-permit page to the Permits route', state: 'assigned' },
+  ];
+  const canon = [
+    { q: 'How do I pay a parking ticket?', a: '"Pay your Burbank citation online at the payment portal using your citation number and license plate. You can also pay by phone or by mail."', owner: 'City Clerk', added: 'Oct 2' },
+    { q: 'What day is my trash pickup?', a: '"Your collection day depends on your address. Use the collection-day lookup, enter your address, and it shows your trash, recycling and green-waste days."', owner: 'Public Works', added: 'Sep 28' },
+    { q: 'How do I start water or power service?', a: '"Start, stop or transfer Burbank Water & Power service with the online form, or call (818) 238-3700. Have your address and ID ready."', owner: 'BWP', added: 'Sep 20' },
+  ];
+  const routeDefs = [
+    { name: 'Website', flow: 'classify → website_pipeline', grounds: 'Full burbank-code-v1 index', fallback: true,
+      rule: 'Default route. Anything not clearly matched by another route lands here and is answered from the full index.',
+      examples: ['How do I contact the city?', 'When is the next council meeting?', 'Where do I pay my water bill?'] },
+    { name: 'Planning', flow: 'classify → planning', grounds: 'eCode + 15 Planning library PDFs',
+      rule: 'Questions about land use, the general plan, specific plans, development standards, the housing element and planning entitlements.',
+      examples: ['What does the Media District Specific Plan allow?', 'What is the density bonus?', 'Can I build an ADU?'] },
+    { name: 'Permits', flow: 'classify → permit agent', grounds: 'Permit workflows',
+      rule: 'Questions about applying for, paying for, or checking the status of a permit or inspection.',
+      examples: ['How do I get a building permit?', 'What inspections do I need?', 'How much is a solar permit?'] },
+    { name: 'Events', flow: 'classify → events', grounds: 'City calendar feed',
+      rule: 'Questions about city events, programs, classes and calendar dates.',
+      examples: ['What events are happening this weekend?', 'When is the farmers market?'] },
+    { name: 'Zoning', flow: 'classify → zoning', grounds: 'Parcel designation, else Planning retrieval',
+      rule: 'Questions about a specific property’s zone, its allowed uses, setbacks or lot-specific rules.',
+      examples: ['What zone is 123 N Main St?', 'What can I build on my lot?', 'What are the setbacks for R-1?'] },
+    { name: 'Business licensing', flow: 'awaiting approval', grounds: 'Proposed: business license + tax PDFs', pending: true,
+      rule: 'Questions about applying for, renewing or paying a city business license or business tax.',
+      examples: ['How do I get a business license?', 'When is my business tax due?'] },
+  ];
+  const audit = [
+    { when: 'Oct 21, 10:42', who: 'D. Alvarez', role: 'Admin', action: 'Excluded 14 superseded fee schedules from the index' },
+    { when: 'Oct 20, 16:08', who: 'D. Alvarez', role: 'Admin', action: 'Re-crawled burbankca.gov (3,850 chunks)' },
+    { when: 'Oct 18, 09:15', who: 'System', role: 'Automated', action: 'Re-indexed Burbank Municipal Code (eCode360)' },
+    { when: 'Oct 14, 14:30', who: 'J. Rivera', role: 'Editor', action: 'Added canonical answer: "What zone is my property in?"' },
+    { when: 'Oct 12, 11:02', who: 'System', role: 'Automated', action: 'Re-indexed Planning document library (15 PDFs)' },
+    { when: 'Oct 9, 15:47', who: 'M. Chen', role: 'Editor', action: 'Assigned gap "film permit" to Permits team' },
+  ];
+
+  // ---------- renderers ----------
+  function renderKpis() {
+    $('#kpiStrip').innerHTML = kpis.map((k) => `
+      <div class="kpi${k.attn ? ' attn' : ''}">
+        <div class="k-label">${k.label}</div>
+        <div class="k-val cx">${k.val}</div>
+        <div class="k-delta ${k.good ? 'good' : ''}">${k.delta}</div>
+      </div>`).join('');
+  }
+
+  function renderSpark() {
+    const W = 560, H = 150, m = { t: 12, r: 12, b: 18, l: 12 };
+    const n = convos.length, max = Math.max(...convos) * 1.1;
+    const xx = (i) => m.l + (i / (n - 1)) * (W - m.l - m.r);
+    const yy = (v) => H - m.b - (v / max) * (H - m.t - m.b);
+    const line = (arr) => arr.map((v, i) => (i ? 'L' : 'M') + xx(i).toFixed(1) + ' ' + yy(v).toFixed(1)).join(' ');
+    const area = line(convos) + ` L${xx(n - 1).toFixed(1)} ${H - m.b} L${xx(0).toFixed(1)} ${H - m.b} Z`;
+    $('#spark').innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block">
+        <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#3d7d74" stop-opacity="0.24"/>
+          <stop offset="100%" stop-color="#3d7d74" stop-opacity="0"/></linearGradient></defs>
+        <path d="${area}" fill="url(#g)"/>
+        <path d="${line(convos)}" fill="none" stroke="#2f5751" stroke-width="2.2" stroke-linejoin="round"/>
+        <path d="${line(resolved)}" fill="none" stroke="#8aa8a1" stroke-width="1.5" stroke-dasharray="3 3"/>
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--faint);margin-top:4px">
+        <span>${sparkFrom}</span><span>${sparkTo}</span></div>`;
+  }
+
+  function renderBars(id, rows, muted) {
+    const max = Math.max(...rows.map((r) => r.n));
+    $(id).innerHTML = rows.map((r, i) => `
+      <div class="bar-row">
+        <div class="bar-top"><span class="lbl">${r.label}</span><span class="num cx">${fmt(r.n)}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(r.n / max * 100).toFixed(1)}%${muted && i ? ';background:var(--border-strong)' : ''}"></div></div>
+      </div>`).join('');
+  }
+
+  function renderAttn() {
+    const items = [
+      { t: '9 answers need review', s: '7 need new content, 2 need a canonical answer', tab: 'review', tone: 'warn' },
+      { t: '2 sources are stale', s: 'Not re-crawled recently', tab: 'sources', tone: 'warn' },
+      { t: '1 source failed to crawl', s: 'Permits landing page returned no content', tab: 'sources', tone: 'bad' },
+    ];
+    $('#attnList').innerHTML = items.map((x) => `
+      <button class="btn" style="justify-content:flex-start;text-align:left;width:100%" data-goto="${x.tab}">
+        <span class="badge b-${x.tone}"><span class="dot"></span></span>
+        <span style="display:flex;flex-direction:column"><b style="font-size:13px">${x.t}</b>
+        <small style="color:var(--muted);font-weight:400;font-size:12px">${x.s}</small></span>
+        <svg style="margin-left:auto;width:15px;height:15px;color:var(--faint)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+      </button>`).join('');
+    $$('#attnList [data-goto]').forEach((b) => b.addEventListener('click', () => go(b.dataset.goto)));
+  }
+
+  const TYPE_ICO = {
+    web: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>',
+    pdf: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+    code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>',
+  };
+  const STATUS = {
+    live: '<span class="badge b-ok"><span class="dot"></span>Live</span>',
+    stale: '<span class="badge b-warn"><span class="dot"></span>Stale</span>',
+    failed: '<span class="badge b-bad"><span class="dot"></span>Failed</span>',
+    excluded: '<span class="badge b-mute"><span class="dot"></span>Excluded</span>',
+  };
+  const HEALTH = {
+    ok: '<span class="badge b-ok">OK</span>', review: '<span class="badge b-warn">Needs review</span>',
+    bad: '<span class="badge b-bad">Error</span>', super: '<span class="badge b-mute">Superseded</span>',
+  };
+  let srcFilter = 'all', srcQuery = '';
+  function renderSrcSummary() {
+    const tot = sources.length, chunks = sources.reduce((a, s) => a + s.chunks, 0);
+    const stale = sources.filter((s) => s.status === 'stale').length;
+    const excl = sources.filter((s) => s.status === 'excluded').length;
+    const failed = sources.filter((s) => s.status === 'failed').length;
+    $('#srcSummary').innerHTML = `
+      <div class="s"><b class="cx">${tot}</b>sources indexed</div>
+      <div class="s"><b class="cx">${fmt(chunks)}</b>chunks</div>
+      <div class="s"><b class="cx" style="color:var(--warn)">${stale}</b>stale</div>
+      <div class="s"><b class="cx" style="color:var(--bad)">${failed}</b>failed</div>
+      <div class="s"><b class="cx">${excl}</b>excluded</div>`;
+  }
+  function renderChips() {
+    const counts = { all: sources.length };
+    sources.forEach((s) => { const k = s.type === 'web' ? 'web' : s.type === 'pdf' ? 'pdf' : 'code'; counts[k] = (counts[k] || 0) + 1; });
+    counts.stale = sources.filter((s) => s.status === 'stale' || s.status === 'failed').length;
+    counts.excluded = sources.filter((s) => s.status === 'excluded').length;
+    const defs = [['all', 'All'], ['web', 'Web'], ['pdf', 'PDF'], ['code', 'Code'], ['stale', 'Needs attention'], ['excluded', 'Excluded']];
+    $('#srcChips').innerHTML = defs.map(([k, l]) => `<button class="chip" data-f="${k}" aria-pressed="${k === srcFilter}">${l}<span class="c-n cx">${counts[k] || 0}</span></button>`).join('');
+    $$('#srcChips .chip').forEach((c) => c.addEventListener('click', () => { srcFilter = c.dataset.f; renderChips(); renderSrc(); }));
+  }
+  function srcMatch(s) {
+    if (srcQuery && !(s.name + ' ' + s.url).toLowerCase().includes(srcQuery)) return false;
+    if (srcFilter === 'all') return true;
+    if (srcFilter === 'stale') return s.status === 'stale' || s.status === 'failed';
+    if (srcFilter === 'excluded') return s.status === 'excluded';
+    return s.type === srcFilter;
+  }
+  function renderSrc() {
+    const rows = sources.filter(srcMatch);
+    $('#srcBody').innerHTML = rows.map((s) => {
+      const excl = s.status === 'excluded';
+      return `<tr>
+        <td><div class="src-name"><div class="src-ico ${s.type}">${TYPE_ICO[s.type]}</div>
+          <div class="src-text"><div class="t1">${s.name}</div><div class="t2">${s.url}</div></div></div></td>
+        <td><span class="pill">${s.type === 'code' ? 'eCode' : s.type.toUpperCase()}</span></td>
+        <td class="num-cell cx">${s.chunks ? fmt(s.chunks) : '—'}</td>
+        <td class="cx" style="white-space:nowrap;color:${s.status === 'stale' ? 'var(--warn)' : 'var(--muted)'}">${s.crawled}</td>
+        <td>${STATUS[s.status]}</td>
+        <td>${HEALTH[s.health]}</td>
+        <td><div class="row-actions">
+          <button class="icon-btn" title="${excl ? 'Restore' : 'Re-crawl'}" data-act="${excl ? 'restore' : 'recrawl'}" data-n="${s.name}">
+            ${excl ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>'
+                   : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>'}</button>
+          ${excl ? '' : '<button class="icon-btn" title="Exclude (denylist)" data-act="exclude" data-n="' + s.name + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m5 5 14 14"/></svg></button>'}
+          <button class="icon-btn danger" title="Delete from index" data-act="delete" data-n="${s.name}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
+        </div></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">No sources match.</td></tr>`;
+    $$('#srcBody [data-act]').forEach((b) => b.addEventListener('click', () => {
+      const m = { recrawl: 'Re-crawl queued for', exclude: 'Added to denylist and removed:', delete: 'Deleted from index:', restore: 'Restored:' }[b.dataset.act];
+      toast(`${m} ${b.dataset.n}`);
+    }));
+  }
+
+  let qFilter = 'all';
+  function renderQChips() {
+    const c = { all: queue.length, content: queue.filter((x) => x.fix === 'content').length, canonical: queue.filter((x) => x.fix === 'canonical').length };
+    $('#qChips').innerHTML = [['all', 'All'], ['content', 'Needs content'], ['canonical', 'Needs canonical answer']]
+      .map(([k, l]) => `<button class="chip" data-q="${k}" aria-pressed="${k === qFilter}">${l}<span class="c-n cx">${c[k]}</span></button>`).join('');
+    $$('#qChips .chip').forEach((ch) => ch.addEventListener('click', () => { qFilter = ch.dataset.q; renderQChips(); renderQueue(); }));
+  }
+  function renderQueue() {
+    const rows = queue.filter((x) => qFilter === 'all' || x.fix === qFilter);
+    $('#queueList').innerHTML = rows.map((g, idx) => {
+      const col = g.conf < 40 ? 'bad' : 'warn';
+      const metric = g.staleSource
+        ? `<span class="conf" style="background:color-mix(in srgb, var(--ok) 12%, #fff);color:var(--ok)">${g.conf}% match</span>`
+        : `<span class="conf" style="background:color-mix(in srgb, var(--${col}) 13%, #fff);color:var(--${col})">${g.conf}% conf</span>`;
+      const isCanon = g.fix === 'canonical';
+      const tag = isCanon ? '<span class="badge b-info" style="margin-left:6px">Needs canonical answer</span>'
+                          : '<span class="badge b-warn" style="margin-left:6px">Needs content</span>';
+      const ansBlock = g.ans ? `<div class="ans">${g.ans}${g.cites ? ` <span class="cites">cited ${g.cites}</span>` : ''}</div>` : '';
+      const fixBtn = `<button class="btn ${isCanon ? '' : 'primary'} sm" data-gfix="${idx}">Fix in Sources</button>`;
+      const canonBtn = `<button class="btn ${isCanon ? 'primary' : ''} sm" data-canon="${idx}">Write canonical answer</button>`;
+      const actionBtns = isCanon ? canonBtn + fixBtn : fixBtn + canonBtn;
+      const seed = g.q === 'What zone is my property in?' ? 'I can’t look up your specific parcel, but you can find your zoning in seconds: open the Burbank Zoning Map, enter your address, and it shows your designation. For a formal determination, contact the Planning Division at (818) 238-5250.' : '';
+      return `<div class="gap">
+        <div>
+          <div class="q">${g.q} ${tag}</div>
+          <div class="meta"><span class="cx">${fmt(g.asks)} asks</span><span class="why">${g.why}</span></div>
+          ${ansBlock}
+          <div class="fix"><span>Suggested fix:</span> ${g.detail}</div>
+          <div class="composer" id="comp${idx}">
+            <textarea placeholder="Write the official answer residents should get...">${seed}</textarea>
+            <div style="display:flex;gap:8px"><button class="btn primary sm" data-save="${idx}">Save canonical answer</button>
+            <button class="btn ghost sm" data-cancelc="${idx}">Cancel</button></div>
+          </div>
+        </div>
+        <div class="right">
+          ${metric}
+          <span class="badge ${g.state === 'assigned' ? 'b-info' : 'b-mute'}">${g.state === 'assigned' ? 'Assigned' : 'New'}</span>
+          ${actionBtns}
+          <button class="btn ghost sm" data-gassign="${idx}">${g.state === 'assigned' ? 'Reassign' : 'Assign'}</button>
+        </div>
+      </div>`;
+    }).join('');
+    $$('#queueList [data-gfix]').forEach((b) => b.addEventListener('click', () => go('sources')));
+    $$('#queueList [data-canon]').forEach((b) => b.addEventListener('click', () => $('#comp' + b.dataset.canon).classList.add('open')));
+    $$('#queueList [data-cancelc]').forEach((b) => b.addEventListener('click', () => $('#comp' + b.dataset.cancelc).classList.remove('open')));
+    $$('#queueList [data-save]').forEach((b) => b.addEventListener('click', () => { $('#comp' + b.dataset.save).classList.remove('open'); toast('Canonical answer saved, it now overrides retrieval'); }));
+    $$('#queueList [data-gassign]').forEach((b) => b.addEventListener('click', () => toast('Assigned to the owning department')));
+  }
+  function renderCanon() {
+    $('#canonBody').innerHTML = canon.map((c) => `
+      <tr><td style="font-weight:600">${c.q}</td><td style="color:var(--muted)">${c.a}</td>
+      <td><span class="pill">${c.owner}</span></td><td class="ts">${c.added}</td>
+      <td class="num-cell"><button class="icon-btn" title="Edit" data-edit="1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button></td></tr>`).join('');
+    $$('#canonBody [data-edit]').forEach((b) => b.addEventListener('click', () => toast('Opening editor')));
+  }
+  function wireCanonAdd() {
+    $('#canonAddToggle').addEventListener('click', () => $('#canonForm').classList.toggle('open'));
+    $('#canonCancel').addEventListener('click', () => $('#canonForm').classList.remove('open'));
+    $('#canonSubmit').addEventListener('click', () => {
+      const q = $('#canonQ').value.trim(), a = $('#canonA').value.trim();
+      if (!q || !a) { toast('Enter a question and an answer'); return; }
+      canon.unshift({ q, a: '"' + a.replace(/^"+|"+$/g, '') + '"', owner: $('#canonOwner').value.trim() || 'Staff', added: 'Just now' });
+      renderCanon();
+      $('#canonQ').value = ''; $('#canonA').value = ''; $('#canonOwner').value = '';
+      $('#canonForm').classList.remove('open');
+      toast('Canonical answer added, it now overrides retrieval');
+    });
+  }
+
+  function renderRoutes() {
+    $('#routeList').innerHTML = routeDefs.map((r, i) => {
+      if (r.pending) {
+        return `<div class="route" style="border-style:dashed;background:var(--surface-2)">
+          <div class="r-head"><span class="r-name">${r.name}</span>
+            <span class="badge b-warn"><span class="dot"></span>Pending Ask Saira approval</span>
+            <span class="pill">${r.grounds}</span>
+            <span class="r-flow" style="margin-left:auto">${r.flow}</span></div>
+          <label class="section-title" style="margin:0">Routes here when</label>
+          <textarea data-route="${i}" disabled>${r.rule}</textarea>
+          <div>
+            <div class="section-title" style="margin:0 0 6px">Example questions</div>
+            <div class="chips">${r.examples.map((e) => `<span class="pill">${e}</span>`).join('')}</div>
+          </div>
+          <div class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>Submitted by staff. Goes live only after Ask Saira reviews it; until then it does not affect routing.<button class="btn ghost sm" data-withdraw="${i}" style="margin-left:auto">Withdraw request</button></div>
+        </div>`;
+      }
+      return `<div class="route">
+        <div class="r-head"><span class="r-name">${r.name}</span>
+          ${r.fallback ? '<span class="badge b-mute">Default / fallback</span>' : ''}
+          <span class="pill">${r.grounds}</span>
+          <span class="r-flow" style="margin-left:auto">${r.flow}</span></div>
+        <label class="section-title" style="margin:0">Routes here when</label>
+        <textarea data-route="${i}">${r.rule}</textarea>
+        <div>
+          <div class="section-title" style="margin:0 0 6px">Example questions <span style="font-weight:400;text-transform:none;letter-spacing:0">the classifier matches against these</span></div>
+          <div class="chips">${r.examples.map((e) => `<span class="pill">${e}</span>`).join('')}<button class="chip" data-addex="${i}">+ add</button></div>
+        </div>
+        <div><button class="btn primary sm" data-saver="${i}">Save routing rule</button></div>
+      </div>`;
+    }).join('');
+    $$('#routeList [data-saver]').forEach((b) => b.addEventListener('click', () => toast('Routing rule saved, the classifier uses it on the next question')));
+    $$('#routeList [data-addex]').forEach((b) => b.addEventListener('click', () => toast('Add an example question')));
+    $$('#routeList [data-withdraw]').forEach((b) => b.addEventListener('click', () => { routeDefs.splice(+b.dataset.withdraw, 1); renderRoutes(); toast('Route request withdrawn'); }));
+  }
+  function wireRouteAdd() {
+    $('#routeAddToggle').addEventListener('click', () => $('#routeForm').classList.toggle('open'));
+    $('#routeCancel').addEventListener('click', () => $('#routeForm').classList.remove('open'));
+    $('#routeSubmit').addEventListener('click', () => {
+      const name = $('#routeName').value.trim(), rule = $('#routeRule').value.trim();
+      if (!name || !rule) { toast('Enter a route name and when it should route'); return; }
+      const ex = $('#routeEx').value.split(',').map((s) => s.trim()).filter(Boolean);
+      routeDefs.push({ name, flow: 'awaiting approval', grounds: $('#routeSrc').value.trim() || 'Proposed sources', pending: true, rule, examples: ex.length ? ex : ['(no examples yet)'] });
+      renderRoutes();
+      $('#routeName').value = ''; $('#routeRule').value = ''; $('#routeEx').value = ''; $('#routeSrc').value = '';
+      $('#routeForm').classList.remove('open');
+      toast('Route submitted to Ask Saira for approval');
+    });
+  }
+  function renderAudit() {
+    $('#auditBody').innerHTML = audit.map((a) => `
+      <tr><td class="ts">${a.when}</td>
+      <td><span class="a-who">${a.who}</span> <span class="badge b-mute" style="margin-left:4px">${a.role}</span></td>
+      <td>${a.action}</td></tr>`).join('');
+  }
+
+  // ---------- tabs ----------
+  const TABS = {
+    overview: { title: 'Overview', sub: 'Last 28 days across every channel. Sample data for this mockup.', actions: '<button class="btn sm" data-noop="export">Export report</button>' },
+    sources: { title: 'Sources', sub: 'Every site, PDF and code set feeding the assistant. Add, re-crawl, exclude or remove.', actions: '<button class="btn primary" id="addToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add source</button>' },
+    review: { title: 'Review queue', sub: 'Everything the assistant answers poorly, flagged automatically. Each item needs either new content or a canonical answer.', actions: '' },
+    routing: { title: 'Routing', sub: 'What makes a question go to each route. Edit the rule and examples to fix misrouting.', actions: '' },
+    access: { title: 'Access & audit', sub: 'Roles and a log of every change to sources, answers and routing.', actions: '' },
+  };
+  function go(tab) {
+    $$('.nav-item').forEach((n) => n.setAttribute('aria-current', String(n.dataset.tab === tab)));
+    $$('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== tab; });
+    $('#tabTitle').textContent = TABS[tab].title;
+    $('#tabSub').textContent = TABS[tab].sub;
+    $('#tabActions').innerHTML = TABS[tab].actions;
+    if (tab === 'sources') {
+      $('#addToggle').addEventListener('click', () => $('#addForm').classList.toggle('open'));
+    } else {
+      const ex = $('[data-noop]'); if (ex) ex.addEventListener('click', () => toast('Report exported'));
+    }
+    window.scrollTo(0, 0);
+  }
+  $$('.nav-item').forEach((n) => n.addEventListener('click', () => go(n.dataset.tab)));
+
+  // sources toolbar wiring
+  $('#srcSearch').addEventListener('input', (e) => { srcQuery = e.target.value.toLowerCase().trim(); renderSrc(); });
+  $('#addCancel').addEventListener('click', () => $('#addForm').classList.remove('open'));
+  $('#addSubmit').addEventListener('click', () => {
+    const v = $('#addUrl').value.trim();
+    toast(v ? 'Queued for crawl & index: ' + v : 'Enter a URL or choose a PDF');
+    if (v) { $('#addUrl').value = ''; $('#addForm').classList.remove('open'); }
+  });
+  $$('#addForm [data-kind]').forEach((b) => b.addEventListener('click', () => {
+    $$('#addForm [data-kind]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $('#addUrl').placeholder = b.dataset.kind === 'pdf' ? 'Choose a PDF to upload...' : 'https://www.burbankca.gov/...';
+  }));
+
+  // ---------- live data (Overview tab) ----------
+  // Overview reads GET /admin/insights (query_traces aggregation, served by the same backend, so
+  // same-origin). The other tabs stay on sample data until their backends land. Any fetch failure
+  // leaves the sample in place, so the console still renders when opened offline or pre-deploy.
+  const WINDOW = '28';
+  const KPI_LABEL = { conversations: 'Conversations', resolution: 'Self-serve resolution',
+    response: 'Median response', grounded: 'Grounded answers', csat: 'Resident satisfaction' };
+  const GAP_FIX = {
+    'No answer found': 'Nothing in the index answered this. Add a source, or pin a canonical answer.',
+    'Marked unhelpful': 'A resident marked this unhelpful. Improve the source or pin a canonical answer.',
+    'Weak source match': 'Retrieved weakly (low reranker score). Add or strengthen the source page.',
+  };
+  const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+  const fmtDay = (iso) => {
+    try { return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }); }
+    catch (e) { return iso; }
+  };
+  async function loadInsights() {
+    try {
+      const r = await fetch('/admin/insights?window=' + WINDOW, { headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const p = await r.json();
+      if (!p || !Array.isArray(p.kpis) || !p.kpis.length) return;   // no live data -> keep sample
+      kpis = p.kpis.map((k) => ({ label: KPI_LABEL[k.metric] || cap(k.metric), val: k.value,
+        delta: k.delta || '', good: k.tone === 'good', attn: false }));
+      routes = (p.routes || []).map((x) => ({ label: cap(x.route), n: x.conversations }));
+      topics = (p.topics || []).map((x) => ({ label: x.topic, n: x.questions }));
+      const cd = p.convos_daily || [];
+      convos = cd.map((d) => d.conversations);
+      resolved = cd.map((d) => d.resolved);
+      if (cd.length) { sparkFrom = fmtDay(cd[0].day); sparkTo = fmtDay(cd[cd.length - 1].day); }
+      // Review queue: live gaps (read-only). `fix`/`detail` are inferred from the gap's issue;
+      // every gap can still be sent to content or given a canonical answer by staff.
+      queue = (p.gaps || []).map((g) => ({
+        q: g.question, asks: g.asks, conf: g.confidence, why: g.issue,
+        fix: 'content', state: 'new', detail: GAP_FIX[g.issue] || 'Review the answer and add a source or canonical answer.',
+      }));
+      TABS.overview.sub = 'Last ' + WINDOW + ' days, live from query_traces.';
+      const ov = $('[data-panel="overview"]');
+      if (ov && !ov.hidden) $('#tabSub').textContent = TABS.overview.sub;
+      renderKpis();
+      renderBars('#routeBars', routes);
+      renderBars('#topicBars', topics, true);
+      if (convos.length) renderSpark();
+      renderQChips();
+      renderQueue();
+    } catch (e) { /* offline / pre-deploy -> sample stays, console keeps working */ }
+  }
+
+  // init
+  renderKpis(); renderSpark(); renderBars('#routeBars', routes); renderBars('#topicBars', topics, true);
+  renderAttn(); renderSrcSummary(); renderChips(); renderSrc(); renderQChips(); renderQueue();
+  renderCanon(); wireCanonAdd(); renderRoutes(); wireRouteAdd(); renderAudit();
+  go('overview');
+  loadInsights();
+})();
+</script>
+
+</body></html>
