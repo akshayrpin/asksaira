@@ -772,7 +772,7 @@
 
   // ---------- tabs ----------
   const TABS = {
-    overview: { title: 'Overview', sub: 'Last 28 days across every channel. Sample data for this mockup.', actions: '<button class="btn sm" data-noop="export">Export report</button>' },
+    overview: { title: 'Overview', sub: 'Last 28 days across every channel. Sample data for this mockup.', actions: '<select id="winSel" class="btn sm" style="margin-right:8px"><option value="7">Last 7 days</option><option value="28">Last 28 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select><button class="btn sm" data-noop="export">Export report</button>' },
     sources: { title: 'Sources', sub: 'Every site, PDF and code set feeding the assistant. Add, re-crawl, exclude or remove.', actions: '<button class="btn primary" id="addToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add source</button>' },
     review: { title: 'Review queue', sub: 'Everything the assistant answers poorly, flagged automatically. Each item needs either new content or a canonical answer.', actions: '' },
     routing: { title: 'Routing', sub: 'What makes a question go to each route. Edit the rule and examples to fix misrouting.', actions: '' },
@@ -788,6 +788,13 @@
       $('#addToggle').addEventListener('click', () => $('#addForm').classList.toggle('open'));
     } else {
       const ex = $('[data-noop]'); if (ex) ex.addEventListener('click', () => toast('Report exported'));
+    }
+    if (tab === 'overview') {
+      const sel = $('#winSel');
+      if (sel) {
+        sel.value = WINDOW;                           // reflect the current window on (re)render
+        sel.addEventListener('change', () => { WINDOW = sel.value; loadInsights(); });
+      }
     }
     window.scrollTo(0, 0);
   }
@@ -810,7 +817,8 @@
   // Overview reads GET /admin/insights (query_traces aggregation, served by the same backend, so
   // same-origin). The other tabs stay on sample data until their backends land. Any fetch failure
   // leaves the sample in place, so the console still renders when opened offline or pre-deploy.
-  const WINDOW = '28';
+  let WINDOW = '28';   // current Overview time window; the #winSel dropdown changes it
+  const WINDOW_LABEL = { '7': 'Last 7 days', '28': 'Last 28 days', '90': 'Last 90 days', all: 'All time' };
   const KPI_LABEL = { conversations: 'Conversations', resolution: 'Self-serve resolution',
     response: 'Median response', grounded: 'Grounded answers', csat: 'Resident satisfaction' };
   const GAP_FIX = {
@@ -843,7 +851,7 @@
         q: g.question, asks: g.asks, conf: g.confidence, why: g.issue,
         fix: 'content', state: 'new', detail: GAP_FIX[g.issue] || 'Review the answer and add a source or canonical answer.',
       }));
-      TABS.overview.sub = 'Last ' + WINDOW + ' days, live from query_traces.';
+      TABS.overview.sub = WINDOW_LABEL[WINDOW] + ', live from query_traces.';
       const ov = $('[data-panel="overview"]');
       if (ov && !ov.hidden) $('#tabSub').textContent = TABS.overview.sub;
       renderKpis();
