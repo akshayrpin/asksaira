@@ -47,22 +47,25 @@ CODE_SLOTS = 2   # non-code queries: at most this many municipal-code chunks kep
 
 
 def _demote_code(chunks, k):
-    """Non-code queries: only reorder when municipal code is FLOODING the natural top-k. If code
-    already holds <= CODE_SLOTS of the top-k it earned those slots, so leave the ranking untouched
-    (code that wasn't top-ranked is never promoted). If it floods, pull the city's own pages up and
-    keep at most CODE_SLOTS code chunks, so an ordinance still supports the answer without dominating
-    it. So 'how do I report weeds' leads with the 311 page yet still carries a little of the
-    ordinance, while a question where code merely ranked 2nd is left exactly as retrieval had it."""
+    """Non-code queries: keep municipal code from DOMINATING a general answer by capping it to
+    CODE_SLOTS chunks in the top-k -- but preserve rank order, so a top-ranked ordinance still sits
+    where retrieval put it instead of being buried behind weaker website pages. We drop the SURPLUS
+    code chunks (the 3rd+), never the best ones. If code holds <= CODE_SLOTS of the top-k, nothing
+    changes. So 'how do I report weeds' still leads with the top-ranked 311 page and carries only a
+    little ordinance, while a question whose best answer IS a code section keeps that section up top
+    (e.g. two co-equal protest provisions that both rank above the distractor pages)."""
     top = chunks[:k]
-    code_in_top = [c for c in top if c.get("source_category") == "code"]
-    if len(code_in_top) <= CODE_SLOTS:
+    if len([c for c in top if c.get("source_category") == "code"]) <= CODE_SLOTS:
         return top
-    site = [c for c in chunks if c.get("source_category") != "code"]
-    kept = code_in_top[:CODE_SLOTS]
-    out = site[:k - len(kept)] + kept
-    if len(out) < k:                                  # few website chunks in the pool -> backfill
-        seen = {c["id"] for c in out}
-        out += [c for c in chunks if c["id"] not in seen][:k - len(out)]
+    out, kept_code = [], 0
+    for c in chunks:                                   # walk in reranked order, skipping surplus code
+        if c.get("source_category") == "code":
+            if kept_code >= CODE_SLOTS:
+                continue
+            kept_code += 1
+        out.append(c)
+        if len(out) >= k:
+            break
     return out[:k]
 
 SEARCH_SVC = os.environ.get("AZURE_SEARCH_SERVICE", "")
