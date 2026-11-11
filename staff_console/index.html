@@ -803,10 +803,52 @@
   // sources toolbar wiring
   $('#srcSearch').addEventListener('input', (e) => { srcQuery = e.target.value.toLowerCase().trim(); renderSrc(); });
   $('#addCancel').addEventListener('click', () => $('#addForm').classList.remove('open'));
-  $('#addSubmit').addEventListener('click', () => {
+  // Sources write path: POST /admin/sources enqueues a job on the shared ingestion service and
+  // returns a job_id; we then poll /admin/sources/jobs/<id> through the stages. Any failure (incl.
+  // the service not being live yet -> 503) just surfaces a toast; the console keeps working.
+  const STAGE_LABEL = {
+    queued: 'Queued', crawling: 'Crawling the page', chunking: 'Chunking',
+    contextualizing: 'Adding context', embedding: 'Embedding', indexing: 'Updating the index',
+    done: 'Indexed and live', failed: 'Failed',
+  };
+  let ingestPoll = null;
+  function pollIngestJob(jobId, label) {
+    clearInterval(ingestPoll);
+    ingestPoll = setInterval(async () => {
+      try {
+        const r = await fetch('/admin/sources/jobs/' + encodeURIComponent(jobId), { headers: { Accept: 'application/json' } });
+        if (!r.ok) return;   // transient; keep polling
+        const j = await r.json();
+        if (j.state === 'done') { clearInterval(ingestPoll); toast(label + ': indexed and live'); }
+        else if (j.state === 'failed') { clearInterval(ingestPoll); toast(label + ': failed, ' + (j.log_tail || 'see service logs')); }
+        else { toast(label + ': ' + (STAGE_LABEL[j.state] || j.state || 'working') + '...'); }
+      } catch (e) { /* transient network blip; keep polling */ }
+    }, 3000);
+  }
+  $('#addSubmit').addEventListener('click', async () => {
+    const pressed = $('#addForm [data-kind][aria-pressed="true"]');
+    const kind = pressed ? pressed.dataset.kind : 'web';
     const v = $('#addUrl').value.trim();
-    toast(v ? 'Queued for crawl & index: ' + v : 'Enter a URL or choose a PDF');
-    if (v) { $('#addUrl').value = ''; $('#addForm').classList.remove('open'); }
+    if (kind === 'pdf') { toast('PDF upload is not wired yet; use a web URL for now'); return; }
+    if (!v) { toast('Enter a URL'); return; }
+    toast('Submitting: ' + v);
+    try {
+      const r = await fetch('/admin/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ kind, url: v }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 202 && j.job_id) {
+        $('#addUrl').value = ''; $('#addForm').classList.remove('open');
+        toast('Ingesting ' + v + '...');
+        pollIngestJob(j.job_id, v);
+      } else if (r.status === 503) {
+        toast('Ingestion service is not live yet');
+      } else {
+        toast('Could not start: ' + (j.error || ('HTTP ' + r.status)));
+      }
+    } catch (e) { toast('Could not reach the server'); }
   });
   $$('#addForm [data-kind]').forEach((b) => b.addEventListener('click', () => {
     $$('#addForm [data-kind]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));

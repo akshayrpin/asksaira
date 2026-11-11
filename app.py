@@ -179,6 +179,43 @@ async def admin_insights():
     return jsonify(payload)
 
 
+@bp.route("/admin/sources", methods=["POST"])
+async def admin_sources_ingest():
+    # TODO(auth): require staff identity once login/roles land.
+    # Trigger one ingestion job on the shared service. `city` is injected server-side from
+    # INGEST_CITY, never trusted from the client. Returns {job_id} immediately; the UI polls.
+    from backend.admin.sources_api import (
+        start_ingest, IngestNotConfigured, IngestError,
+    )
+    body = await request.get_json(silent=True) or {}
+    try:
+        result = await start_ingest(kind=body.get("kind", "web"), url=body.get("url", ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except IngestNotConfigured:
+        return jsonify({"error": "Ingestion service is not configured."}), 503
+    except IngestError as e:
+        return jsonify({"error": str(e)}), 502
+    return jsonify(result), 202
+
+
+@bp.route("/admin/sources/jobs/<job_id>", methods=["GET"])
+async def admin_sources_job(job_id):
+    # TODO(auth): require staff identity once login/roles land.
+    from backend.admin.sources_api import (
+        job_status, IngestNotConfigured, IngestError,
+    )
+    try:
+        result = await job_status(job_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except IngestNotConfigured:
+        return jsonify({"error": "Ingestion service is not configured."}), 503
+    except IngestError as e:
+        return jsonify({"error": str(e)}), 502
+    return jsonify(result)
+
+
 # Debug settings
 DEBUG = os.environ.get("DEBUG", "false")
 if DEBUG.lower() == "true":
