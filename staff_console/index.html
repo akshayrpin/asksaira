@@ -628,7 +628,7 @@
         <td><span class="pill">${s.type === 'code' ? 'eCode' : s.type.toUpperCase()}</span></td>
         <td class="num-cell cx">${s.chunks ? fmt(s.chunks) : '—'}</td>
         <td class="cx" style="white-space:nowrap;color:${s.status === 'stale' ? 'var(--warn)' : 'var(--muted)'}">${s.crawled}</td>
-        <td>${STATUS[s.status]}</td>
+        <td>${s.job ? '<span class="badge b-warn"><span class="dot"></span>' + (s.stageLabel || 'Working') + '</span>' : STATUS[s.status]}</td>
         <td>${HEALTH[s.health]}</td>
         <td><div class="row-actions">
           <button class="icon-btn" title="${excl ? 'Restore' : 'Re-crawl'}" data-act="${excl ? 'restore' : 'recrawl'}" data-n="${s.name}">
@@ -812,16 +812,26 @@
     done: 'Indexed and live', failed: 'Failed',
   };
   let ingestPoll = null;
-  function pollIngestJob(jobId, label) {
+  function pollIngestJob(jobId, label, row) {
     clearInterval(ingestPoll);
     ingestPoll = setInterval(async () => {
       try {
         const r = await fetch('/admin/sources/jobs/' + encodeURIComponent(jobId), { headers: { Accept: 'application/json' } });
         if (!r.ok) return;   // transient; keep polling
         const j = await r.json();
-        if (j.state === 'done') { clearInterval(ingestPoll); toast(label + ': indexed and live'); }
-        else if (j.state === 'failed') { clearInterval(ingestPoll); toast(label + ': failed, ' + (j.log_tail || 'see service logs')); }
-        else { toast(label + ': ' + (STAGE_LABEL[j.state] || j.state || 'working') + '...'); }
+        if (row) row.stageLabel = STAGE_LABEL[j.state] || j.state;
+        if (j.state === 'done') {
+          clearInterval(ingestPoll);
+          if (row) { row.job = null; row.status = 'live'; row.health = 'ok'; row.crawled = 'just now'; }
+          toast(label + ': indexed and live');
+        } else if (j.state === 'failed') {
+          clearInterval(ingestPoll);
+          if (row) { row.job = null; row.status = 'failed'; row.health = 'bad'; }
+          toast(label + ': failed, ' + (j.log_tail || 'see service logs'));
+        } else {
+          toast(label + ': ' + (STAGE_LABEL[j.state] || j.state || 'working') + '...');
+        }
+        if (row) { renderSrcSummary(); renderSrc(); }
       } catch (e) { /* transient network blip; keep polling */ }
     }, 3000);
   }
@@ -841,8 +851,14 @@
       const j = await r.json().catch(() => ({}));
       if (r.status === 202 && j.job_id) {
         $('#addUrl').value = ''; $('#addForm').classList.remove('open');
+        // Optimistically add the row at the top with a live status that updates as the job runs.
+        const row = { name: v, url: v, type: kind, chunks: 0, crawled: 'just now',
+                      status: 'live', health: 'review', job: j.job_id, stageLabel: 'Queued' };
+        sources.unshift(row);
+        srcFilter = 'all';
+        renderChips(); renderSrcSummary(); renderSrc();
         toast('Ingesting ' + v + '...');
-        pollIngestJob(j.job_id, v);
+        pollIngestJob(j.job_id, v, row);
       } else if (r.status === 503) {
         toast('Ingestion service is not live yet');
       } else {
