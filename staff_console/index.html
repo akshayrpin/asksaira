@@ -724,10 +724,24 @@
   }
   function srcMainRow(s) {
     const excl = s.status === 'excluded';
-    const host = isHost(s);
+    // Read-only rows (a separate index this service can't delete into yet, e.g. the municipal code)
+    // are shown for visibility but not expandable or deletable here.
+    const host = isHost(s) && !s.readonly;
     const caret = host
       ? `<button class="icon-btn exp ${srcOpen.has(srcKey(s)) ? 'open' : ''}" title="Show pages" data-exp="${srcKey(s)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></button>`
       : '<span class="exp-spacer"></span>';
+    if (s.readonly) {
+      return `<tr>
+        <td><div class="src-name">${caret}<div class="src-ico ${s.type}">${TYPE_ICO[s.type]}</div>
+          <div class="src-text"><div class="t1">${s.name}</div><div class="t2">${s.url} · ${fmt(s.pages)} pages</div></div></div></td>
+        <td><span class="pill">${s.type === 'code' ? 'eCode' : s.type.toUpperCase()}</span></td>
+        <td class="num-cell cx">${s.chunks ? fmt(s.chunks) : '—'}</td>
+        <td class="cx" style="white-space:nowrap;color:var(--muted)">${s.crawled}</td>
+        <td>${STATUS[s.status]}</td>
+        <td>${HEALTH[s.health]}</td>
+        <td><span class="t2" style="color:var(--muted)">Separate index</span></td>
+      </tr>`;
+    }
     const pages = host && s.pages ? `<div class="t2">${s.url} · ${fmt(s.pages)} pages</div>` : `<div class="t2">${s.url}</div>`;
     return `<tr>
         <td><div class="src-name">${caret}<div class="src-ico ${s.type}">${TYPE_ICO[s.type]}</div>
@@ -761,7 +775,7 @@
   function renderSrc() {
     const rows = sources.filter(srcMatch);
     $('#srcBody').innerHTML = rows.map((s) =>
-      srcMainRow(s) + (isHost(s) && srcOpen.has(srcKey(s)) ? srcSubRows(s) : '')
+      srcMainRow(s) + (isHost(s) && !s.readonly && srcOpen.has(srcKey(s)) ? srcSubRows(s) : '')
     ).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">No sources match.</td></tr>`;
     $$('#srcBody [data-exp]').forEach((b) => b.addEventListener('click', () => {
       const s = sources.find((x) => srcKey(x) === b.dataset.exp); if (s) toggleExpand(s);
