@@ -29,13 +29,42 @@ def window_days(token) -> int | None:
     return WINDOWS.get(str(token), 28)
 
 
+def _shift(iso: str, days: int) -> str:
+    """The same-length window immediately before the one starting at `iso`."""
+    return (datetime.fromisoformat(iso) - timedelta(days=days)).isoformat()
+
+
+async def _patch_users(payload: dict, days: int | None, ts_from: str | None) -> None:
+    """Overwrite the Users tile with the real session count from the conversations container
+    (query_traces can't provide it), plus a delta vs. the prior equal window. Best-effort: on any
+    failure the tile keeps its trace-derived fallback value."""
+    tile = next((k for k in payload.get("kpis", []) if k.get("metric") == "users"), None)
+    if tile is None:
+        return
+    sessions = await obs.count_sessions(ts_from)
+    tile["value"] = f"{sessions:,}"
+    tile["delta"], tile["tone"] = "", "neutral"
+    if ts_from and days:                  # trend only when the window is bounded
+        prior = await obs.count_sessions(_shift(ts_from, days), ts_from)
+        if prior:
+            d = sessions - prior
+            tile["tone"] = "good" if d >= 0 else "bad"
+            tile["delta"] = f"{d:+,.0f} vs prior {days}d"
+
+
 async def build_insights(days: int | None = 28) -> dict:
     """The Overview payload: {kpis, convos_daily, topics, routes, top_questions, gaps}."""
-    traces = await obs.read_traces(_window_from(days))
+    ts_from = _window_from(days)
+    traces = await obs.read_traces(ts_from)
     if traces:
         fb = await obs.read_feedback_map()
         if fb:
             for t in traces:
                 if not t.get("feedback"):
                     t["feedback"] = fb.get(t.get("answer_id"), "")
-    return I.build(traces)
+    payload = I.build(traces)
+    try:
+        await _patch_users(payload, days, ts_from)
+    except Exception:                     # never let the Users tile break the whole page
+        pass
+    return payload

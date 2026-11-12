@@ -129,6 +129,37 @@ async def read_traces(ts_from=None, limit=20000):
         return []
 
 
+async def count_sessions(ts_from=None, ts_to=None):
+    """Count chat SESSIONS (one 'conversation' doc per thread) in the conversations container,
+    optionally within [ts_from, ts_to) by createdAt. This is the real users/sessions number:
+    query_traces carries no conversation id, so the distinct-session count only exists here. Each
+    conversation has its own id, so the count is right even though anonymous visitors share one
+    userId. Returns 0 if the store isn't configured (dashboard degrades, never errors)."""
+    await _get_container()                # ensure _client is initialized
+    if _client is None:
+        return 0
+    # conversation.createdAt is a naive UTC isoformat (no offset); normalize the window bounds to
+    # the same shape so the lexicographic string comparison lines up.
+    def _naive(x):
+        return str(x).replace("Z", "").split("+")[0] if x else x
+    clauses = ["c.type='conversation'"]
+    params = []
+    if ts_from:
+        clauses.append("c.createdAt >= @from")
+        params.append({"name": "@from", "value": _naive(ts_from)})
+    if ts_to:
+        clauses.append("c.createdAt < @to")
+        params.append({"name": "@to", "value": _naive(ts_to)})
+    sql = "SELECT VALUE COUNT(1) FROM c WHERE " + " AND ".join(clauses)
+    try:
+        conv = _client.get_database_client(DATABASE).get_container_client(CONV_CONTAINER)
+        async for n in conv.query_items(query=sql, parameters=params):
+            return int(n)
+    except Exception as e:                # noqa: BLE001
+        logging.warning("count_sessions failed (ignored): %s", e)
+    return 0
+
+
 async def read_feedback_map():
     """message_id -> feedback for rated assistant messages in the conversations container.
     A trace's answer_id is that message id, so this backfills thumbs up/down onto traces."""

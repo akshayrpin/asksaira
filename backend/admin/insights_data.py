@@ -105,6 +105,32 @@ def _day(ts) -> str | None:
         return str(ts)[:10] or None
 
 
+try:
+    from zoneinfo import ZoneInfo
+    _LOCAL_TZ = ZoneInfo("America/Los_Angeles")   # Burbank is Pacific; business hours are local
+except Exception:
+    _LOCAL_TZ = None
+
+
+def _after_hours(t: dict) -> bool | None:
+    """Was this question asked outside city business hours (Mon-Fri 8:00-18:00 local)?
+    Returns None when the timestamp can't be parsed, so untimed rows don't skew the rate."""
+    ts = t.get("ts")
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if _LOCAL_TZ is not None:
+            dt = dt.astimezone(_LOCAL_TZ)
+    except Exception:
+        return None
+    weekend = dt.weekday() >= 5          # Sat/Sun
+    off_hours = dt.hour < 8 or dt.hour >= 18
+    return weekend or off_hours
+
+
 def _norm_q(q: str) -> str:
     return re.sub(r"\s+", " ", (q or "").strip().lower()).rstrip("?.! ")
 
@@ -125,18 +151,21 @@ def kpis(traces: list[dict]) -> list[dict]:
     Delta compares the most-recent half of the traces to the prior half when a split is
     possible; otherwise delta is blank (not enough history to trend)."""
     def _metrics(rows):
-        n = len(rows)
+        n = len(rows)                                    # one trace == one resident message
         answered = sum(1 for t in rows if _answered(t))
-        grounded = sum(1 for t in rows if _chunks(t) > 0)
-        lat = [v for v in (_to_float(t.get("latency_ms")) for t in rows) if v is not None]
         fbs = [f for f in (_feedback(t) for t in rows) if f]
         pos = sum(1 for f in fbs if f == "positive")
+        # Distinct users = distinct conversation sessions. Falls back to the message count when
+        # traces carry no conversation_id (older data), so the tile is never blank.
+        convos = {c for t in rows if (c := t.get("conversation_id"))}
+        flags = [f for f in (_after_hours(t) for t in rows) if f is not None]
+        after = sum(1 for f in flags if f)
         return {
-            "conversations": n,
+            "users": len(convos) if convos else n,
+            "messages": n,
             "resolution": (answered / n) if n else 0.0,
-            "response": (median(lat) / 1000.0) if lat else None,
-            "grounded": (grounded / n) if n else 0.0,
             "csat": (pos / len(fbs)) if fbs else None,
+            "after_hours": (after / len(flags)) if flags else None,
             "_rated": len(fbs),
         }
 
@@ -163,13 +192,12 @@ def kpis(traces: list[dict]) -> list[dict]:
         dtxt, tone = delta(delta_key, delta_fmt, good_up) if delta_key else ("", "neutral")
         out.append({"metric": metric, "value": value, "delta": dtxt, "tone": tone})
 
-    tile("conversations", f"{cur['conversations']:,}", "conversations", lambda x: f"{x:+,.0f}")
+    tile("users", f"{cur['users']:,}", "users", lambda x: f"{x:+,.0f}")
+    tile("messages", f"{cur['messages']:,}", "messages", lambda x: f"{x:+,.0f}")
     tile("resolution", pct(cur["resolution"]), "resolution")
-    tile("response", f"{cur['response']:.1f}s" if cur["response"] is not None else "—",
-         "response", lambda x: f"{x:.1f}s", good_up=False)
-    tile("grounded", pct(cur["grounded"]), "grounded")
     tile("csat", (pct(cur["csat"]) + f" ({cur['_rated']})") if cur["csat"] is not None else f"— ({cur['_rated']})",
          "csat")
+    tile("after_hours", pct(cur["after_hours"]) if cur["after_hours"] is not None else "—", "after_hours")
     return out
 
 

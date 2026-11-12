@@ -441,11 +441,11 @@
   // Overview data: seeded with mockup sample, overwritten by loadInsights() when the backend
   // (/admin/insights) is reachable. `let` so the adapter can swap in live values and re-render.
   let kpis = [
-    { label: 'Conversations', val: '4,210', delta: '+12% vs prior 28d', good: true },
-    { label: 'Self-serve resolution', val: '86%', delta: '+3 pts', good: true },
-    { label: 'Answers with citations', val: '91%', delta: '+2 pts', good: true },
-    { label: 'Flagged for review', val: '9', delta: '2 need a canonical answer', attn: true },
-    { label: 'Stale sources', val: '2', delta: 'need review', attn: true },
+    { label: 'Users', val: '1,860', delta: '+9% vs prior 28d', good: true },
+    { label: 'Messages', val: '4,210', delta: '+12% vs prior 28d', good: true },
+    { label: 'Automated resolution rate', val: '86%', delta: '+3 pts', good: true },
+    { label: 'Resident satisfaction', val: '92% (240)', delta: '+2 pts', good: true },
+    { label: 'After-hours usage', val: '38%', delta: '+4 pts', good: true },
   ];
   let convos = [182,175,164,104,92,188,179,186,171,158,101,88,193,184,190,177,162,108,95,201,188,195,182,169,112,99,207,194];
   let resolved = convos.map((c, i) => Math.round(c * (0.84 + (i % 5) * 0.006)));
@@ -877,8 +877,8 @@
   // leaves the sample in place, so the console still renders when opened offline or pre-deploy.
   let WINDOW = '28';   // current Overview time window; the #winSel dropdown changes it
   const WINDOW_LABEL = { '7': 'Last 7 days', '28': 'Last 28 days', '90': 'Last 90 days', all: 'All time' };
-  const KPI_LABEL = { conversations: 'Conversations', resolution: 'Self-serve resolution',
-    response: 'Median response', grounded: 'Grounded answers', csat: 'Resident satisfaction' };
+  const KPI_LABEL = { users: 'Users', messages: 'Messages', resolution: 'Automated resolution rate',
+    csat: 'Resident satisfaction', after_hours: 'After-hours usage' };
   const GAP_FIX = {
     'No answer found': 'Nothing in the index answered this. Add a source, or pin a canonical answer.',
     'Marked unhelpful': 'A resident marked this unhelpful. Improve the source or pin a canonical answer.',
