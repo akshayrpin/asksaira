@@ -34,7 +34,7 @@ SERVICE_TOKEN = os.environ.get("INGEST_SERVICE_TOKEN", "")
 # Which city/index this deployment ingests into. The service maps it to PIPE_OUT + CODE_INDEX.
 CITY = os.environ.get("INGEST_CITY", "")
 
-VALID_KINDS = {"web", "pdf"}
+VALID_KINDS = {"web", "delete", "pdf"}
 _START_TIMEOUT = httpx.Timeout(15.0)    # the service only enqueues and returns a job_id, so quick
 _STATUS_TIMEOUT = httpx.Timeout(10.0)
 
@@ -59,7 +59,9 @@ def _validate(kind: str, url: str) -> None:
     """Fail fast on obviously bad input before we bother the service. ValueError -> 400 upstream."""
     if kind not in VALID_KINDS:
         raise ValueError(f"kind must be one of {sorted(VALID_KINDS)}")
-    if kind == "web":
+    if kind == "delete" and not url:
+        raise ValueError("delete requires a url")
+    if (kind == "web" and url) or kind == "delete":
         parts = urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.netloc:
             raise ValueError("url must be a full http(s) URL")
@@ -93,6 +95,47 @@ async def start_ingest(kind: str = "web", url: str = "") -> dict:
     if not data.get("job_id"):
         raise IngestError("ingestion service did not return a job_id")
     return {"job_id": data["job_id"], "state": data.get("state", "queued")}
+
+
+async def list_sources() -> list[dict]:
+    """The city's current index inventory (one row per site/PDF set), from the ingestion service.
+    Returns [] when the service isn't configured yet, so the console degrades to its sample table."""
+    if not is_configured():
+        raise IngestNotConfigured()
+    try:
+        async with httpx.AsyncClient(timeout=_STATUS_TIMEOUT) as client:
+            r = await client.get(f"{SERVICE_URL}/sources", headers=_headers())
+    except httpx.HTTPError as e:
+        raise IngestError(f"could not reach ingestion service: {e}") from e
+    if r.status_code != 200:
+        raise IngestError(f"ingestion service returned {r.status_code}: {r.text[:200]}")
+    try:
+        data = r.json()
+    except ValueError as e:
+        raise IngestError("ingestion service returned a non-JSON body") from e
+    return data.get("sources", []) if isinstance(data, dict) else []
+
+
+async def list_source_urls(host: str, stype: str = "") -> list[dict]:
+    """Individual page/PDF URLs under one host (drill-down for a host row). Returns [] when the
+    service isn't configured."""
+    if not is_configured():
+        raise IngestNotConfigured()
+    params = {"host": host}
+    if stype:
+        params["type"] = stype
+    try:
+        async with httpx.AsyncClient(timeout=_STATUS_TIMEOUT) as client:
+            r = await client.get(f"{SERVICE_URL}/sources/urls", params=params, headers=_headers())
+    except httpx.HTTPError as e:
+        raise IngestError(f"could not reach ingestion service: {e}") from e
+    if r.status_code != 200:
+        raise IngestError(f"ingestion service returned {r.status_code}: {r.text[:200]}")
+    try:
+        data = r.json()
+    except ValueError as e:
+        raise IngestError("ingestion service returned a non-JSON body") from e
+    return data.get("urls", []) if isinstance(data, dict) else []
 
 
 async def job_status(job_id: str) -> dict:

@@ -126,6 +126,26 @@
   .kpi .k-delta.good { color: var(--ok); } .kpi .k-delta.bad { color: var(--bad); }
   .kpi.attn { border-color: color-mix(in srgb, var(--warn) 38%, var(--border)); background: color-mix(in srgb, var(--warn) 5%, #fff); }
   .kpi.attn .k-val { color: var(--warn); }
+  /* Loading / error states (shown instead of data; we never render sample data in its place) */
+  .load-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; text-align: center; padding: 56px 20px; min-height: 220px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); }
+  .load-state .spinner { width: 30px; height: 30px; border-radius: 50%;
+    border: 3px solid var(--border-strong); border-top-color: var(--ok); animation: ls-spin .8s linear infinite; }
+  @keyframes ls-spin { to { transform: rotate(360deg); } }
+  .load-state.error { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 32%, var(--border));
+    background: color-mix(in srgb, var(--bad) 4%, var(--surface)); }
+  .load-state.error svg { width: 30px; height: 30px; }
+  .load-state b { color: var(--ink); font-size: 14px; }
+  .load-state .ls-sub { color: var(--muted); font-size: 12.5px; font-weight: 400; margin-top: 4px; max-width: 360px; }
+  /* Sources drill-down: host rows expand into their individual pages/PDFs */
+  .icon-btn.exp { margin-right: 2px; }
+  .icon-btn.exp svg { transition: transform .15s ease; }
+  .icon-btn.exp.open svg { transform: rotate(90deg); }
+  .exp-spacer { display: inline-block; width: 30px; flex: 0 0 30px; }
+  tr.src-sub td { background: color-mix(in srgb, var(--border) 16%, var(--surface)); font-size: 12.5px; }
+  .sub-url { color: #2f5751; text-decoration: none; word-break: break-all; }
+  .sub-url:hover { text-decoration: underline; }
 
   .grid2 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(100%,21rem),1fr)); }
 
@@ -301,6 +321,8 @@
     <div class="content">
       <!-- OVERVIEW -->
       <section data-panel="overview">
+        <div id="ovState" class="load-state" hidden></div>
+        <div id="ovBody">
         <div class="kpis" style="margin-bottom:18px" id="kpiStrip"></div>
         <div class="grid2">
           <div class="panel">
@@ -320,10 +342,13 @@
             <div class="panel-body" id="attnList" style="display:flex;flex-direction:column;gap:10px"></div>
           </div>
         </div>
+        </div><!-- /#ovBody -->
       </section>
 
       <!-- SOURCES -->
       <section data-panel="sources" hidden>
+        <div id="srcState" class="load-state" hidden></div>
+        <div id="srcBodyWrap">
         <div class="sumstrip" id="srcSummary"></div>
         <div class="addform" id="addForm">
           <div class="field">
@@ -356,15 +381,19 @@
             </table>
           </div>
         </div>
+        </div><!-- /#srcBodyWrap -->
       </section>
 
       <!-- REVIEW QUEUE (gaps + answer review merged) -->
       <section data-panel="review" hidden>
+        <div id="qState" class="load-state" hidden></div>
+        <div id="qBody">
         <div class="toolbar" style="margin-bottom:4px">
           <div class="chips" id="qChips"></div>
           <span class="demo-flag">Flagged automatically: low reranker score, no citation, or a superseded source.</span>
         </div>
         <div class="gaps" id="queueList"></div>
+        </div><!-- /#qBody -->
         <div class="section-title" style="margin-top:16px;display:flex;align-items:center;gap:10px">
           <span>Canonical answers <span style="font-weight:400;text-transform:none;letter-spacing:0">staff-authored, returned verbatim and override retrieval</span></span>
           <button class="btn primary sm" id="canonAddToggle" style="margin-left:auto;text-transform:none;letter-spacing:0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add canonical answer</button>
@@ -459,7 +488,7 @@
     { label: 'Parks, rec & classes', n: 548 }, { label: 'Business license & tax', n: 431 },
     { label: 'Zoning & planning', n: 389 }, { label: 'Water & utility billing', n: 357 },
   ];
-  const sources = [
+  let sources = [
     { name: 'Burbank Municipal Code (eCode360)', url: 'ecode360.com/BU2075', type: 'code', chunks: 4120, crawled: 'Oct 18', status: 'live', health: 'ok' },
     { name: 'burbankca.gov (full site crawl)', url: 'www.burbankca.gov', type: 'web', chunks: 3850, crawled: 'Oct 19', status: 'live', health: 'ok' },
     { name: 'Adopted Burbank Housing Element', url: 'Adopted+Burbank+Housing+Element.pdf', type: 'pdf', chunks: 212, crawled: 'Oct 12', status: 'live', health: 'ok' },
@@ -520,6 +549,25 @@
   ];
 
   // ---------- renderers ----------
+  // Loading / error states. Shown INSTEAD of data; we never render sample numbers in their place,
+  // a wrong figure is worse than an honest "couldn't load". mode: 'loading' | 'error' | 'ok'.
+  const REGION = {
+    overview: ['#ovState', '#ovBody'],
+    sources:  ['#srcState', '#srcBodyWrap'],
+    review:   ['#qState', '#qBody'],
+  };
+  function setState(region, mode) {
+    const [stSel, bodySel] = REGION[region];
+    const st = $(stSel), body = $(bodySel);
+    if (!st || !body) return;
+    if (mode === 'ok') { st.hidden = true; body.hidden = false; return; }
+    body.hidden = true; st.hidden = false; st.className = 'load-state ' + mode;
+    st.innerHTML = mode === 'loading'
+      ? '<div class="spinner"></div><div>Loading…</div>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>'
+        + '<div><b>We couldn’t load this data.</b><div class="ls-sub">Please refresh to try again. If it keeps happening, contact the Ask Saira support team.</div></div>';
+  }
+
   function renderKpis() {
     $('#kpiStrip').innerHTML = kpis.map((k) => `
       <div class="kpi${k.attn ? ' attn' : ''}">
@@ -559,11 +607,19 @@
   }
 
   function renderAttn() {
-    const items = [
-      { t: '9 answers need review', s: '7 need new content, 2 need a canonical answer', tab: 'review', tone: 'warn' },
-      { t: '2 sources are stale', s: 'Not re-crawled recently', tab: 'sources', tone: 'warn' },
-      { t: '1 source failed to crawl', s: 'Permits landing page returned no content', tab: 'sources', tone: 'bad' },
-    ];
+    // Derived from live data (review queue + sources), never hardcoded, so it can't contradict the
+    // tabs it links to. Counts come from whatever has loaded; if nothing is flagged, say so.
+    const items = [];
+    const rev = queue.length;
+    if (rev) items.push({ t: rev + ' answer' + (rev === 1 ? '' : 's') + ' need review',
+      s: 'Flagged by low match, missing citation or a superseded source', tab: 'review', tone: 'warn' });
+    const stale = sources.filter((s) => s.status === 'stale').length;
+    const failed = sources.filter((s) => s.status === 'failed').length;
+    if (stale) items.push({ t: stale + ' source' + (stale === 1 ? '' : 's') + ' stale',
+      s: 'Not re-crawled recently', tab: 'sources', tone: 'warn' });
+    if (failed) items.push({ t: failed + ' source' + (failed === 1 ? '' : 's') + ' failed to crawl',
+      s: 'Returned no content', tab: 'sources', tone: 'bad' });
+    if (!items.length) items.push({ t: 'All clear', s: 'No flagged answers or source issues', tab: 'review', tone: 'info' });
     $('#attnList').innerHTML = items.map((x) => `
       <button class="btn" style="justify-content:flex-start;text-align:left;width:100%" data-goto="${x.tab}">
         <span class="badge b-${x.tone}"><span class="dot"></span></span>
@@ -618,13 +674,63 @@
     if (srcFilter === 'excluded') return s.status === 'excluded';
     return s.type === srcFilter;
   }
-  function renderSrc() {
-    const rows = sources.filter(srcMatch);
-    $('#srcBody').innerHTML = rows.map((s) => {
-      const excl = s.status === 'excluded';
-      return `<tr>
-        <td><div class="src-name"><div class="src-ico ${s.type}">${TYPE_ICO[s.type]}</div>
-          <div class="src-text"><div class="t1">${s.name}</div><div class="t2">${s.url}</div></div></div></td>
+  // Drill-down state: a host row (its url is a bare host, no '/') expands into its individual
+  // pages/PDFs, lazily fetched from GET /admin/sources/urls and cached per host+type.
+  const srcUrls = {};          // "host|type" -> [{url, chunks}] | 'loading'
+  const srcOpen = new Set();   // which host rows are expanded
+  const srcKey = (s) => s.url + '|' + s.type;
+  const isHost = (s) => !String(s.url).includes('/');   // host group (expandable) vs single page
+  async function toggleExpand(s) {
+    const key = srcKey(s);
+    if (srcOpen.has(key)) { srcOpen.delete(key); renderSrc(); return; }
+    srcOpen.add(key);
+    if (!srcUrls[key]) {
+      srcUrls[key] = 'loading'; renderSrc();
+      try {
+        const r = await fetch('/admin/sources/urls?host=' + encodeURIComponent(s.url) + '&type=' + encodeURIComponent(s.type), { headers: { Accept: 'application/json' } });
+        const p = await r.json().catch(() => null);
+        srcUrls[key] = (p && Array.isArray(p.urls)) ? p.urls : [];
+      } catch (e) { srcUrls[key] = []; }
+    }
+    renderSrc();
+  }
+  async function deletePageUrl(parent, url, chunks) {
+    if (!confirm('Delete this page from the index?\n' + url)) return;
+    try {
+      const r = await fetch('/admin/sources', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ kind: 'delete', url }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 202 && j.job_id) { toast('Deleting page…'); deletePagePoll(j.job_id, parent, url, chunks); }
+      else toast(r.status === 503 ? 'Ingestion service is not live yet' : 'Could not delete: ' + (j.error || ('HTTP ' + r.status)));
+    } catch (e) { toast('Could not reach the server'); }
+  }
+  function deletePagePoll(jobId, parent, url, chunks) {
+    clearInterval(ingestPoll);
+    ingestPoll = setInterval(async () => {
+      try {
+        const r = await fetch('/admin/sources/jobs/' + encodeURIComponent(jobId), { headers: { Accept: 'application/json' } });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (j.state === 'done') {
+          clearInterval(ingestPoll);
+          const key = parent && srcKey(parent);
+          if (key && Array.isArray(srcUrls[key])) srcUrls[key] = srcUrls[key].filter((u) => u.url !== url);
+          if (parent) { parent.pages = Math.max(0, (parent.pages || 0) - 1); parent.chunks = Math.max(0, (parent.chunks || 0) - (chunks || 0)); }
+          renderSrcSummary(); renderSrc();
+          toast('Page removed from the index');
+        } else if (j.state === 'failed') { clearInterval(ingestPoll); toast('Delete failed, see service logs'); }
+      } catch (e) { /* transient; keep polling */ }
+    }, 3000);
+  }
+  function srcMainRow(s) {
+    const excl = s.status === 'excluded';
+    const host = isHost(s);
+    const caret = host
+      ? `<button class="icon-btn exp ${srcOpen.has(srcKey(s)) ? 'open' : ''}" title="Show pages" data-exp="${srcKey(s)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></button>`
+      : '<span class="exp-spacer"></span>';
+    const pages = host && s.pages ? `<div class="t2">${s.url} · ${fmt(s.pages)} pages</div>` : `<div class="t2">${s.url}</div>`;
+    return `<tr>
+        <td><div class="src-name">${caret}<div class="src-ico ${s.type}">${TYPE_ICO[s.type]}</div>
+          <div class="src-text"><div class="t1">${s.name}</div>${pages}</div></div></td>
         <td><span class="pill">${s.type === 'code' ? 'eCode' : s.type.toUpperCase()}</span></td>
         <td class="num-cell cx">${s.chunks ? fmt(s.chunks) : '—'}</td>
         <td class="cx" style="white-space:nowrap;color:${s.status === 'stale' ? 'var(--warn)' : 'var(--muted)'}">${s.crawled}</td>
@@ -635,12 +741,37 @@
             ${excl ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>'
                    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>'}</button>
           ${excl ? '' : '<button class="icon-btn" title="Exclude (denylist)" data-act="exclude" data-n="' + s.name + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="m5 5 14 14"/></svg></button>'}
-          <button class="icon-btn danger" title="Delete from index" data-act="delete" data-n="${s.name}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
+          <button class="icon-btn danger" title="${host ? 'Delete whole site from index' : 'Delete from index'}" data-act="delete" data-n="${s.name}" data-url="${s.url}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>
         </div></td>
       </tr>`;
-    }).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">No sources match.</td></tr>`;
+  }
+  function srcSubRows(s) {
+    const key = srcKey(s), data = srcUrls[key];
+    if (data === 'loading') return `<tr class="src-sub"><td colspan="7" style="padding-left:62px;color:var(--muted)">Loading pages…</td></tr>`;
+    if (!data || !data.length) return `<tr class="src-sub"><td colspan="7" style="padding-left:62px;color:var(--muted)">No pages found.</td></tr>`;
+    return data.map((u) => `<tr class="src-sub">
+        <td style="padding-left:62px"><a class="sub-url" href="${u.url}" target="_blank" rel="noopener">${u.url}</a></td>
+        <td></td>
+        <td class="num-cell cx">${fmt(u.chunks)}</td>
+        <td colspan="3"></td>
+        <td><div class="row-actions"><button class="icon-btn danger" title="Delete this page" data-del-url="${u.url}" data-parent="${key}" data-chunks="${u.chunks}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button></div></td>
+      </tr>`).join('');
+  }
+  function renderSrc() {
+    const rows = sources.filter(srcMatch);
+    $('#srcBody').innerHTML = rows.map((s) =>
+      srcMainRow(s) + (isHost(s) && srcOpen.has(srcKey(s)) ? srcSubRows(s) : '')
+    ).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">No sources match.</td></tr>`;
+    $$('#srcBody [data-exp]').forEach((b) => b.addEventListener('click', () => {
+      const s = sources.find((x) => srcKey(x) === b.dataset.exp); if (s) toggleExpand(s);
+    }));
+    $$('#srcBody [data-del-url]').forEach((b) => b.addEventListener('click', () => {
+      const parent = sources.find((x) => srcKey(x) === b.dataset.parent);
+      deletePageUrl(parent, b.dataset.delUrl, +b.dataset.chunks || 0);
+    }));
     $$('#srcBody [data-act]').forEach((b) => b.addEventListener('click', () => {
-      const m = { recrawl: 'Re-crawl queued for', exclude: 'Added to denylist and removed:', delete: 'Deleted from index:', restore: 'Restored:' }[b.dataset.act];
+      if (b.dataset.act === 'delete') { deleteSource(b.dataset.url, b.dataset.n); return; }
+      const m = { recrawl: 'Re-crawl queued for', exclude: 'Added to denylist and removed:', restore: 'Restored:' }[b.dataset.act];
       toast(`${m} ${b.dataset.n}`);
     }));
   }
@@ -835,6 +966,55 @@
       } catch (e) { /* transient network blip; keep polling */ }
     }, 3000);
   }
+  // Delete path: POST /admin/sources {kind:'delete', url} runs index.py --delete-url on the service
+  // (removes the page's/site's chunks AND its manifest entry, so index + manifest + this table stay
+  // in sync), then we poll the job and drop the row on 'done'. A host row deletes the whole site.
+  async function deleteSource(url, name) {
+    const s = sources.find((x) => x.url === url);
+    const whole = s && s.chunks > 200;   // host/site row (vs. a single added page)
+    const msg = whole
+      ? `Delete the entire "${name}" source (${fmt(s.chunks)} chunks) from the index? This cannot be undone.`
+      : `Delete "${name}" from the index?`;
+    if (!confirm(msg)) return;
+    if (s) { s.job = 'del'; s.stageLabel = 'Deleting'; renderSrc(); }
+    try {
+      const r = await fetch('/admin/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ kind: 'delete', url }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 202 && j.job_id) {
+        toast('Deleting ' + name + '...');
+        deletePoll(j.job_id, url, name);
+      } else {
+        if (s) { s.job = null; renderSrc(); }
+        toast(r.status === 503 ? 'Ingestion service is not live yet'
+                               : 'Could not delete: ' + (j.error || ('HTTP ' + r.status)));
+      }
+    } catch (e) { if (s) { s.job = null; renderSrc(); } toast('Could not reach the server'); }
+  }
+  function deletePoll(jobId, url, name) {
+    clearInterval(ingestPoll);
+    ingestPoll = setInterval(async () => {
+      try {
+        const r = await fetch('/admin/sources/jobs/' + encodeURIComponent(jobId), { headers: { Accept: 'application/json' } });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (j.state === 'done') {
+          clearInterval(ingestPoll);
+          sources = sources.filter((x) => x.url !== url);
+          renderChips(); renderSrcSummary(); renderSrc();
+          toast(name + ': removed from the index');
+        } else if (j.state === 'failed') {
+          clearInterval(ingestPoll);
+          const s = sources.find((x) => x.url === url);
+          if (s) { s.job = null; renderSrc(); }
+          toast(name + ': delete failed, ' + (j.log_tail || 'see service logs'));
+        }
+      } catch (e) { /* transient; keep polling */ }
+    }, 3000);
+  }
   $('#addSubmit').addEventListener('click', async () => {
     const pressed = $('#addForm [data-kind][aria-pressed="true"]');
     const kind = pressed ? pressed.dataset.kind : 'web';
@@ -890,11 +1070,12 @@
     catch (e) { return iso; }
   };
   async function loadInsights() {
+    setState('overview', 'loading'); setState('review', 'loading');
     try {
       const r = await fetch('/admin/insights?window=' + WINDOW, { headers: { Accept: 'application/json' } });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const p = await r.json();
-      if (!p || !Array.isArray(p.kpis) || !p.kpis.length) return;   // no live data -> keep sample
+      if (!p || !Array.isArray(p.kpis) || !p.kpis.length) throw new Error('no data');
       kpis = p.kpis.map((k) => ({ label: KPI_LABEL[k.metric] || cap(k.metric), val: k.value,
         delta: k.delta || '', good: k.tone === 'good', attn: false }));
       routes = (p.routes || []).map((x) => ({ label: cap(x.route), n: x.conversations }));
@@ -916,17 +1097,41 @@
       renderBars('#routeBars', routes);
       renderBars('#topicBars', topics, true);
       if (convos.length) renderSpark();
+      renderAttn();
       renderQChips();
       renderQueue();
-    } catch (e) { /* offline / pre-deploy -> sample stays, console keeps working */ }
+      setState('overview', 'ok'); setState('review', 'ok');
+    } catch (e) {
+      // No fallback to sample: show an honest error in both panels fed by this fetch.
+      setState('overview', 'error'); setState('review', 'error');
+    }
   }
 
-  // init
-  renderKpis(); renderSpark(); renderBars('#routeBars', routes); renderBars('#topicBars', topics, true);
-  renderAttn(); renderSrcSummary(); renderChips(); renderSrc(); renderQChips(); renderQueue();
+  // Sources table: live index inventory from GET /admin/sources (the ingestion service rolls the
+  // manifest up into one row per site / PDF set). No sample fallback: if the service is unreachable
+  // or not configured, we show an error, never stale demo rows. An empty-but-configured index
+  // renders as an honest empty table.
+  async function loadSources() {
+    setState('sources', 'loading');
+    try {
+      const r = await fetch('/admin/sources', { headers: { Accept: 'application/json' } });
+      const p = await r.json().catch(() => null);
+      if (!r.ok || !p || p.configured === false || p.error || !Array.isArray(p.sources)) throw new Error('load failed');
+      sources = p.sources;
+      renderSrcSummary(); renderChips(); renderSrc(); renderAttn();
+      setState('sources', 'ok');
+    } catch (e) {
+      setState('sources', 'error');
+    }
+  }
+
+  // init — static tabs (canon answers, routes, audit) have no backend yet and stay as authored;
+  // the data-backed panels start in a loading state and are filled by the loaders (no sample).
   renderCanon(); wireCanonAdd(); renderRoutes(); wireRouteAdd(); renderAudit();
+  setState('overview', 'loading'); setState('sources', 'loading'); setState('review', 'loading');
   go('overview');
   loadInsights();
+  loadSources();
 })();
 </script>
 

@@ -179,6 +179,43 @@ async def admin_insights():
     return jsonify(payload)
 
 
+@bp.route("/admin/sources", methods=["GET"])
+async def admin_sources_list():
+    # TODO(auth): require staff identity once login/roles land.
+    # The current index inventory (one row per site/PDF set) from the shared ingestion service.
+    # Empty list (not an error) when the service isn't configured, so the console keeps its sample.
+    from backend.admin.sources_api import (
+        list_sources, IngestNotConfigured, IngestError,
+    )
+    try:
+        rows = await list_sources()
+    except IngestNotConfigured:
+        # Not an empty index: the service isn't wired. Signal it so the console shows an error,
+        # not a misleading empty/zero table.
+        return jsonify({"sources": [], "configured": False})
+    except IngestError as e:
+        return jsonify({"error": str(e), "sources": [], "configured": True}), 502
+    return jsonify({"sources": rows, "configured": True})
+
+
+@bp.route("/admin/sources/urls", methods=["GET"])
+async def admin_sources_urls():
+    # TODO(auth): require staff identity once login/roles land.
+    # Drill-down for a host row: the individual page/PDF URLs under ?host= (optionally ?type=).
+    from backend.admin.sources_api import (
+        list_source_urls, IngestNotConfigured, IngestError,
+    )
+    host = request.args.get("host", "")
+    stype = request.args.get("type", "")
+    try:
+        urls = await list_source_urls(host, stype)
+    except IngestNotConfigured:
+        return jsonify({"urls": [], "configured": False})
+    except IngestError as e:
+        return jsonify({"error": str(e), "urls": []}), 502
+    return jsonify({"urls": urls})
+
+
 @bp.route("/admin/sources", methods=["POST"])
 async def admin_sources_ingest():
     # TODO(auth): require staff identity once login/roles land.
