@@ -127,6 +127,7 @@
   .kpi.attn { border-color: color-mix(in srgb, var(--warn) 38%, var(--border)); background: color-mix(in srgb, var(--warn) 5%, #fff); }
   .kpi.attn .k-val { color: var(--warn); }
   /* Loading / error states (shown instead of data; we never render sample data in its place) */
+  .load-state[hidden] { display: none; }
   .load-state { display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 12px; text-align: center; padding: 56px 20px; min-height: 220px;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted); }
@@ -313,7 +314,7 @@
     <div class="topbar">
       <div>
         <h1 id="tabTitle">Overview</h1>
-        <p id="tabSub">Last 28 days across every channel. Sample data for this mockup.</p>
+        <p id="tabSub">Last 28 days across every channel.</p>
       </div>
       <div class="spacer"></div>
       <div id="tabActions"></div>
@@ -903,7 +904,7 @@
 
   // ---------- tabs ----------
   const TABS = {
-    overview: { title: 'Overview', sub: 'Last 28 days across every channel. Sample data for this mockup.', actions: '<select id="winSel" class="btn sm" style="margin-right:8px"><option value="7">Last 7 days</option><option value="28">Last 28 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select><button class="btn sm" data-noop="export">Export report</button>' },
+    overview: { title: 'Overview', sub: 'Last 28 days across every channel.', actions: '<select id="winSel" class="btn sm" style="margin-right:8px"><option value="7">Last 7 days</option><option value="28">Last 28 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select><button class="btn sm" data-noop="export">Export report</button>' },
     sources: { title: 'Sources', sub: 'Every site, PDF and code set feeding the assistant. Add, re-crawl, exclude or remove.', actions: '<button class="btn primary" id="addToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add source</button>' },
     review: { title: 'Review queue', sub: 'Everything the assistant answers poorly, flagged automatically. Each item needs either new content or a canonical answer.', actions: '' },
     routing: { title: 'Routing', sub: 'What makes a question go to each route. Edit the rule and examples to fix misrouting.', actions: '' },
