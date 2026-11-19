@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Hey Burbank Console</title>
+<title>Staff Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap">
@@ -278,9 +278,9 @@
 <div id="app">
   <aside class="side">
     <div class="brand">
-      <div class="brand-mark">HB</div>
+      <div class="brand-mark">S</div>
       <div>
-        <div class="brand-name">Hey Burbank</div>
+        <div class="brand-name">Ask Saira</div>
         <div class="brand-sub">Staff console</div>
       </div>
     </div>
@@ -357,11 +357,11 @@
               <button class="chip" id="addKindWeb" aria-pressed="true" data-kind="web">Web page</button>
               <button class="chip" id="addKindPdf" aria-pressed="false" data-kind="pdf">PDF upload</button>
             </div>
-            <input type="text" id="addUrl" placeholder="https://www.burbankca.gov/...">
+            <input type="text" id="addUrl" placeholder="https://www.yourcity.gov/...">
             <button class="btn primary sm" id="addSubmit">Crawl &amp; index</button>
             <button class="btn ghost sm" id="addCancel">Cancel</button>
           </div>
-          <div class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>New sources are chunked, contextualized and embedded into burbank-code-v1. A re-crawl refreshes in place.</div>
+          <div class="note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>New sources are chunked, contextualized and embedded into the city's code index. A re-crawl refreshes in place.</div>
         </div>
         <div class="panel" style="margin-top:14px">
           <div class="panel-head">
@@ -467,61 +467,22 @@
     $('#toasts').appendChild(t); setTimeout(() => t.remove(), 2600);
   }
 
-  // ---------- data (sample) ----------
-  // Overview data: seeded with mockup sample, overwritten by loadInsights() when the backend
-  // (/admin/insights) is reachable. `let` so the adapter can swap in live values and re-render.
-  let kpis = [
-    { label: 'Users', val: '1,860', delta: '+9% vs prior 28d', good: true },
-    { label: 'Messages', val: '4,210', delta: '+12% vs prior 28d', good: true },
-    { label: 'Automated resolution rate', val: '86%', delta: '+3 pts', good: true },
-    { label: 'Resident satisfaction', val: '92% (240)', delta: '+2 pts', good: true },
-    { label: 'After-hours usage', val: '38%', delta: '+4 pts', good: true },
-  ];
-  let convos = [182,175,164,104,92,188,179,186,171,158,101,88,193,184,190,177,162,108,95,201,188,195,182,169,112,99,207,194];
-  let resolved = convos.map((c, i) => Math.round(c * (0.84 + (i % 5) * 0.006)));
-  let sparkFrom = 'Sep 23', sparkTo = 'Oct 20';
-  let routes = [
-    { label: 'Website (general)', n: 2540 }, { label: 'Permits', n: 690 },
-    { label: 'Planning', n: 430 }, { label: 'Events', n: 330 }, { label: 'Zoning', n: 220 },
-  ];
-  let topics = [
-    { label: 'Permits & inspections', n: 742 }, { label: 'Trash & recycling', n: 613 },
-    { label: 'Parks, rec & classes', n: 548 }, { label: 'Business license & tax', n: 431 },
-    { label: 'Zoning & planning', n: 389 }, { label: 'Water & utility billing', n: 357 },
-  ];
-  let sources = [
-    { name: 'Burbank Municipal Code (eCode360)', url: 'ecode360.com/BU2075', type: 'code', chunks: 4120, crawled: 'Oct 18', status: 'live', health: 'ok' },
-    { name: 'burbankca.gov (full site crawl)', url: 'www.burbankca.gov', type: 'web', chunks: 3850, crawled: 'Oct 19', status: 'live', health: 'ok' },
-    { name: 'Adopted Burbank Housing Element', url: 'Adopted+Burbank+Housing+Element.pdf', type: 'pdf', chunks: 212, crawled: 'Oct 12', status: 'live', health: 'ok' },
-    { name: 'Burbank Center Plan', url: 'Burbank+Center+Plan.pdf', type: 'pdf', chunks: 168, crawled: 'Sep 30', status: 'live', health: 'ok' },
-    { name: 'Media District Specific Plan', url: 'Media+District+Specific+Plan.pdf', type: 'pdf', chunks: 143, crawled: 'Sep 30', status: 'live', health: 'ok' },
-    { name: 'Density Bonus Regulations', url: 'density-bonus-regulations-001.pdf', type: 'pdf', chunks: 54, crawled: 'Oct 12', status: 'live', health: 'ok' },
-    { name: 'ADU Handout (updated 4-10-2024)', url: 'adu-handout-updated-4-10-2024.pdf', type: 'pdf', chunks: 22, crawled: 'Oct 12', status: 'live', health: 'review' },
-    { name: 'Fee Schedule FY2026-27 (current)', url: 'fee-schedule-fy2026-27.pdf', type: 'pdf', chunks: 38, crawled: 'Oct 20', status: 'live', health: 'ok' },
-    { name: 'Events & city calendar', url: 'www.burbankca.gov/calendar', type: 'web', chunks: 64, crawled: 'Oct 20', status: 'live', health: 'ok' },
-    { name: 'Trash & Recycling Guide (2022)', url: 'trash-recycling-guide-2022.pdf', type: 'pdf', chunks: 41, crawled: 'Mar 2024', status: 'stale', health: 'review' },
-    { name: 'Permits landing page', url: 'www.burbankca.gov/.../permits', type: 'web', chunks: 0, crawled: 'Oct 19', status: 'failed', health: 'bad' },
-    { name: 'Fee Reso FY2024-25 + 13 older', url: 'burbank-fee-reso-fy2024-25.pdf', type: 'pdf', chunks: 0, crawled: 'Oct 21', status: 'excluded', health: 'super' },
-  ];
-  // Review-queue gaps: sample until loadInsights() swaps in live gaps from /admin/insights.
-  let queue = [
-    { q: "What's the fee for a solar permit in 2026?", asks: 64, why: 'No current fee schedule was indexed when asked', conf: 38, fix: 'content', detail: 'Index the FY2026-27 fee schedule', state: 'new' },
-    { q: 'Can I keep backyard chickens?', asks: 57, why: 'No matching municipal code section', conf: 31, fix: 'content', detail: 'Add the BMC animal-keeping section', state: 'new' },
-    { q: 'What zone is my property in?', asks: 52, why: 'The bot cannot look up a resident parcel from the code', conf: 40, fix: 'canonical', detail: 'Pin an answer that routes to the parcel GIS lookup', ans: '"Burbank has several zoning designations including R-1, R-2, commercial and industrial..." (never identifies the resident’s parcel)', cites: '[BMC § 31-601]', state: 'assigned' },
-    { q: 'How do I appeal a code enforcement notice?', asks: 49, why: 'Thin coverage, no citation', conf: 44, fix: 'content', detail: 'Add a code-enforcement appeals page', state: 'assigned' },
-    { q: 'What are the rules for short-term rentals?', asks: 46, why: 'Conflicting sources', conf: 41, fix: 'content', detail: 'Reconcile the two STR pages', state: 'new' },
-    { q: 'How much is a building permit?', asks: 44, why: 'Confident answer, but cited a superseded fee schedule (FY2024-25)', conf: 88, staleSource: true, fix: 'content', detail: 'Exclude the old reso and confirm FY2026-27 is indexed', ans: '"Building permit fees start at $154 per the FY2024-25 schedule..."', cites: '[fee-reso-fy2024-25.pdf]', state: 'new' },
-    { q: 'What are your hours and is City Hall open today?', asks: 41, why: 'Gave generic hours, missed the holiday schedule', conf: 45, fix: 'canonical', detail: 'Pin the hours plus a holiday-closure link', ans: '"City Hall is open Monday to Friday, 8am to 5pm." (did not account for the holiday schedule)', state: 'new' },
-    { q: 'Is there rent control in Burbank?', asks: 38, why: 'No matching source', conf: 29, fix: 'content', detail: 'Add a housing / rent-stabilization FAQ', state: 'new' },
-    { q: 'How do I get a film permit?', asks: 33, why: 'Routed to website, no permit page', conf: 47, fix: 'content', detail: 'Add the film-permit page to the Permits route', state: 'assigned' },
-  ];
-  const canon = [
-    { q: 'How do I pay a parking ticket?', a: '"Pay your Burbank citation online at the payment portal using your citation number and license plate. You can also pay by phone or by mail."', owner: 'City Clerk', added: 'Oct 2' },
-    { q: 'What day is my trash pickup?', a: '"Your collection day depends on your address. Use the collection-day lookup, enter your address, and it shows your trash, recycling and green-waste days."', owner: 'Public Works', added: 'Sep 28' },
-    { q: 'How do I start water or power service?', a: '"Start, stop or transfer Burbank Water & Power service with the online form, or call (818) 238-3700. Have your address and ID ready."', owner: 'BWP', added: 'Sep 20' },
-  ];
+  // ---------- data ----------
+  // Overview data loads live from /admin/insights; Sources loads live from /admin/sources. These
+  // start EMPTY (no mockup sample) so the console shows loading/empty states and never fabricated,
+  // city-mismatched numbers until the backend responds. `let` so the adapters can swap in live values.
+  let kpis = [];
+  let convos = [];
+  let resolved = [];
+  let sparkFrom = '', sparkTo = '';
+  let routes = [];
+  let topics = [];
+  let sources = [];
+  // Review-queue gaps: live from /admin/insights (no sample seed).
+  let queue = [];
+  const canon = [];
   const routeDefs = [
-    { name: 'Website', flow: 'classify → website_pipeline', grounds: 'Full burbank-code-v1 index', fallback: true,
+    { name: 'Website', flow: 'classify → website_pipeline', grounds: 'Full city index', fallback: true,
       rule: 'Default route. Anything not clearly matched by another route lands here and is answered from the full index.',
       examples: ['How do I contact the city?', 'When is the next council meeting?', 'Where do I pay my water bill?'] },
     { name: 'Planning', flow: 'classify → planning', grounds: 'eCode + 15 Planning library PDFs',
@@ -540,14 +501,7 @@
       rule: 'Questions about applying for, renewing or paying a city business license or business tax.',
       examples: ['How do I get a business license?', 'When is my business tax due?'] },
   ];
-  const audit = [
-    { when: 'Oct 21, 10:42', who: 'D. Alvarez', role: 'Admin', action: 'Excluded 14 superseded fee schedules from the index' },
-    { when: 'Oct 20, 16:08', who: 'D. Alvarez', role: 'Admin', action: 'Re-crawled burbankca.gov (3,850 chunks)' },
-    { when: 'Oct 18, 09:15', who: 'System', role: 'Automated', action: 'Re-indexed Burbank Municipal Code (eCode360)' },
-    { when: 'Oct 14, 14:30', who: 'J. Rivera', role: 'Editor', action: 'Added canonical answer: "What zone is my property in?"' },
-    { when: 'Oct 12, 11:02', who: 'System', role: 'Automated', action: 'Re-indexed Planning document library (15 PDFs)' },
-    { when: 'Oct 9, 15:47', who: 'M. Chen', role: 'Editor', action: 'Assigned gap "film permit" to Permits team' },
-  ];
+  const audit = [];
 
   // ---------- renderers ----------
   // Loading / error states. Shown INSTEAD of data; we never render sample numbers in their place,
@@ -812,7 +766,7 @@
       const fixBtn = `<button class="btn ${isCanon ? '' : 'primary'} sm" data-gfix="${idx}">Fix in Sources</button>`;
       const canonBtn = `<button class="btn ${isCanon ? 'primary' : ''} sm" data-canon="${idx}">Write canonical answer</button>`;
       const actionBtns = isCanon ? canonBtn + fixBtn : fixBtn + canonBtn;
-      const seed = g.q === 'What zone is my property in?' ? 'I can’t look up your specific parcel, but you can find your zoning in seconds: open the Burbank Zoning Map, enter your address, and it shows your designation. For a formal determination, contact the Planning Division at (818) 238-5250.' : '';
+      const seed = '';
       return `<div class="gap">
         <div>
           <div class="q">${g.q} ${tag}</div>
@@ -1063,7 +1017,7 @@
   });
   $$('#addForm [data-kind]').forEach((b) => b.addEventListener('click', () => {
     $$('#addForm [data-kind]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-    $('#addUrl').placeholder = b.dataset.kind === 'pdf' ? 'Choose a PDF to upload...' : 'https://www.burbankca.gov/...';
+    $('#addUrl').placeholder = b.dataset.kind === 'pdf' ? 'Choose a PDF to upload...' : 'https://www.yourcity.gov/...';
   }));
 
   // ---------- live data (Overview tab) ----------
