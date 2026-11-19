@@ -126,6 +126,101 @@ async def assets(path):
     return await send_from_directory("static/assets", path)
 
 
+# ---------------------------------------------------------------------------
+# Staff console (/admin/*) — the ONLY authenticated surface. Login + roles are
+# stubbed open during dev; when they land, gate every /admin/* route in one
+# place here (a before_request on the prefix). Public chat routes stay anonymous.
+# ---------------------------------------------------------------------------
+@bp.route("/admin")
+@bp.route("/admin/")
+async def admin_console():
+    # TODO(auth): require staff identity once login/roles land.
+    return await send_from_directory("staff_console", "index.html")
+
+
+@bp.route("/admin/insights", methods=["GET"])
+async def admin_insights():
+    # TODO(auth): require staff identity once login/roles land.
+    from backend.admin.insights_api import build_insights, window_days
+    days = window_days(request.args.get("window", "28"))
+    payload = await build_insights(days)
+    return jsonify(payload)
+
+
+@bp.route("/admin/sources", methods=["GET"])
+async def admin_sources_list():
+    # TODO(auth): require staff identity once login/roles land.
+    # The current index inventory (one row per site/PDF set) from the shared ingestion service.
+    # Empty list (not an error) when the service isn't configured, so the console keeps its sample.
+    from backend.admin.sources_api import (
+        list_sources, IngestNotConfigured, IngestError,
+    )
+    try:
+        rows = await list_sources()
+    except IngestNotConfigured:
+        # Not an empty index: the service isn't wired. Signal it so the console shows an error,
+        # not a misleading empty/zero table.
+        return jsonify({"sources": [], "configured": False})
+    except IngestError as e:
+        return jsonify({"error": str(e), "sources": [], "configured": True}), 502
+    return jsonify({"sources": rows, "configured": True})
+
+
+@bp.route("/admin/sources/urls", methods=["GET"])
+async def admin_sources_urls():
+    # TODO(auth): require staff identity once login/roles land.
+    # Drill-down for a host row: the individual page/PDF URLs under ?host= (optionally ?type=).
+    from backend.admin.sources_api import (
+        list_source_urls, IngestNotConfigured, IngestError,
+    )
+    host = request.args.get("host", "")
+    stype = request.args.get("type", "")
+    try:
+        urls = await list_source_urls(host, stype)
+    except IngestNotConfigured:
+        return jsonify({"urls": [], "configured": False})
+    except IngestError as e:
+        return jsonify({"error": str(e), "urls": []}), 502
+    return jsonify({"urls": urls})
+
+
+@bp.route("/admin/sources", methods=["POST"])
+async def admin_sources_ingest():
+    # TODO(auth): require staff identity once login/roles land.
+    # Trigger one ingestion job on the shared service. `city` is injected server-side from
+    # INGEST_CITY, never trusted from the client. Returns {job_id} immediately; the UI polls.
+    from backend.admin.sources_api import (
+        start_ingest, IngestNotConfigured, IngestError,
+    )
+    body = await request.get_json(silent=True) or {}
+    try:
+        result = await start_ingest(kind=body.get("kind", "web"), url=body.get("url", ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except IngestNotConfigured:
+        return jsonify({"error": "Ingestion service is not configured."}), 503
+    except IngestError as e:
+        return jsonify({"error": str(e)}), 502
+    return jsonify(result), 202
+
+
+@bp.route("/admin/sources/jobs/<job_id>", methods=["GET"])
+async def admin_sources_job(job_id):
+    # TODO(auth): require staff identity once login/roles land.
+    from backend.admin.sources_api import (
+        job_status, IngestNotConfigured, IngestError,
+    )
+    try:
+        result = await job_status(job_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except IngestNotConfigured:
+        return jsonify({"error": "Ingestion service is not configured."}), 503
+    except IngestError as e:
+        return jsonify({"error": str(e)}), 502
+    return jsonify(result)
+
+
 # Debug settings
 DEBUG = os.environ.get("DEBUG", "false")
 if DEBUG.lower() == "true":
